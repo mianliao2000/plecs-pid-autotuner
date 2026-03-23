@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python -m pip install numpy matplotlib pandas)",
+      "Bash(python -c \":*)",
+      "Bash(python analyze.py)",
+      "Bash(python -c \"import tkinter; print\\(''tkinter: OK''\\)\")",
+      "Bash(python -c \"import PyQt5; print\\(''PyQt5: OK''\\)\")",
+      "Bash(python -c \"import PyQt6; print\\(''PyQt6: OK''\\)\")",
+      "Bash(python -c \"import PySide2; print\\(''PySide2: OK''\\)\")",
+      "Bash(python -c \"import PySide6; print\\(''PySide6: OK''\\)\")",
+      "Bash(python -c \"import matplotlib; print\\(''matplotlib: OK''\\)\")",
+      "Bash(python -c \"from gui import BuckTunerGui; print\\(''Import OK''\\)\")",
+      "Bash(python gui.py)",
+      "Bash(python -c \"from gui import BuckTunerGui; print\\(''OK''\\)\")"
+    ]
+  }
+}

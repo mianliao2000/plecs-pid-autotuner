@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(reg add:*)",
+      "Bash(powershell -Command \"Set-ItemProperty -Path ''HKCU:\\\\Software\\\\Plexim\\\\PLECS5.0'' -Name XmlRpcEnabled -Value ''true'' -Type String\")",
+      "Bash(powershell -Command \"Get-ItemProperty -Path ''HKCU:\\\\Software\\\\Plexim\\\\PLECS5.0'' -Name XmlRpcEnabled\")",
+      "Bash(rm -f c:/Users/liaom/Documents/Claude/Code/Simulation/Plecs/*.py)",
+      "Read(//c/Users/liaom/Documents/Claude/Code/Simulation/**)"
+    ]
+  }
+}
