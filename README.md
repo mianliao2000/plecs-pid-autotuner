@@ -178,23 +178,22 @@ flowchart TD
     C --> D{PLECS running?}
     D -- No --> E[Launch PLECS.exe]
     E --> C
-    D -- Yes --> F[Compute initial Kp/Ki/Kd/Kf\nfrom wc_initial, phi_m_initial]
+    D -- Yes --> F["Compute initial Kp/Ki/Kd/Kf\nfrom wc_initial, phi_m_initial"]
     F --> G[/Iteration i = 0/]
-
-    G --> H[Write Kp/Ki/Kd/Kf\ninto .plecs XML file]
-    H --> I[Load modified model\nvia RPC]
-    I --> J[Run simulation\nvia RPC]
-    J --> K[Export Scope CSV\nvia RPC]
-    K --> L[Save iter_i.csv\nto results/]
+    G --> H["Write Kp/Ki/Kd/Kf\ninto .plecs XML file"]
+    H --> I[Load modified model via RPC]
+    I --> J[Run simulation via RPC]
+    J --> K[Export Scope CSV via RPC]
+    K --> L["Save iter_i.csv to results/"]
     L --> M[Analyze waveform]
     M --> N{Pass?}
     N -- Yes --> O[Save tuning_log.csv]
-    O --> P([PASS — Done])
+    O --> P([PASS - Done])
     N -- No --> Q{i >= max_iterations?}
     Q -- Yes --> R[Save tuning_log.csv]
-    R --> S([FAIL — Max iterations reached])
-    Q -- No --> T[Adjust wc, phi_m\nvia PidTuner.adjust]
-    T --> U[Recompute Kp/Ki/Kd/Kf\nanalytically]
+    R --> S([FAIL - Max iterations reached])
+    Q -- No --> T["Adjust wc, phi_m via PidTuner.adjust"]
+    T --> U["Recompute Kp/Ki/Kd/Kf analytically"]
     U --> V[i = i + 1]
     V --> H
 ```
@@ -205,15 +204,15 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A([wc, phi_m]) --> B[ωl = wc / 10\nintegral pole decade below crossover]
-    B --> C["Evaluate plant: Gvd(j·wc)\n→ gain_plant, phi_plant"]
-    C --> D["phi_boost = (–π + phi_m) – phi_plant\nphase the compensator must add"]
-    D --> E{phi_boost\nin (–90°, 90°)?}
-    E -- No --> F[Clamp to ±89.4°\navoid numerical singularity]
+    A([wc, phi_m]) --> B["wl = wc / 10\nintegral pole decade below crossover"]
+    B --> C["Evaluate plant: Gvd(j*wc)\n-> gain_plant, phi_plant"]
+    C --> D["phi_boost = (-pi + phi_m) - phi_plant\nphase the compensator must add"]
+    D --> E{"phi_boost in (-90deg, 90deg)?"}
+    E -- No --> F["Clamp to +/-89.4 deg\navoid numerical singularity"]
     F --> G
-    E -- Yes --> G["wz = wc·√((1–sin)/(1+sin))\nwp = wc·√((1+sin)/(1–sin))"]
-    G --> H["Gpid0 = (1/gain_plant)·√(...)"]
-    H --> I["Ki = Gpid0·ωl\nKf = wp\nKp = Gpid0·(1+ωl/wz) – Ki/Kf\nKd = max(0, Gpid0/wz – Kp/Kf)"]
+    E -- Yes --> G["wz = wc*sqrt((1-sin)/(1+sin))\nwp = wc*sqrt((1+sin)/(1-sin))"]
+    G --> H["Gpid0 = (1/gain_plant)*sqrt(...)"]
+    H --> I["Ki = Gpid0*wl\nKf = wp\nKp = Gpid0*(1+wl/wz) - Ki/Kf\nKd = max(0, Gpid0/wz - Kp/Kf)"]
     I --> J([Return Kp, Ki, Kd, Kf])
 ```
 
@@ -223,18 +222,18 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A([header, data rows]) --> B[Identify columns:\ntime, Vout, IL]
-    B --> C[Moving-average filter Vout\nwindow = 4 switching cycles\nto suppress 250 kHz ripple]
-    C --> D[Detect load-step time\nfrom IL step edge]
-    D --> E{Step found\nin lower 75%\nof simulation?}
+    A([header, data rows]) --> B["Identify columns: time, Vout, IL"]
+    B --> C["Moving-average filter Vout\nwindow = 4 switching cycles\nto suppress 250 kHz ripple"]
+    C --> D["Detect load-step time from IL step edge"]
+    D --> E{"Step found in lower\n75% of simulation?"}
     E -- No --> F[Use last detected step]
-    E -- Yes --> G[step_t = first step\nafter 25% startup period]
+    E -- Yes --> G["step_t = first step after 25% startup"]
     F --> H
-    G --> H[Extract segment:\nstep_idx to step_idx + 3 ms]
+    G --> H["Extract segment:\nstep_idx to step_idx + 3 ms"]
     H --> I["v_peak  = max of RAW Vout segment\nv_valley = min of RAW Vout segment"]
-    I --> J["overshoot  = (v_peak – 5.0) / 5.0 × 100\nundershoot = (5.0 – v_valley) / 5.0 × 100"]
-    J --> K[Count oscillations on\nlightly-filtered signal]
-    K --> L[Settling time:\nfirst block within ±2% of 5V]
+    I --> J["overshoot  = (v_peak - 5.0) / 5.0 x 100\nundershoot = (5.0 - v_valley) / 5.0 x 100"]
+    J --> K["Count oscillations on lightly-filtered signal"]
+    K --> L["Settling time:\nfirst block within +/-2% of 5V"]
     L --> M([Return OS%, US%, osc_count, t_settle])
 ```
 
@@ -244,13 +243,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A([filtered Vout segment]) --> B[Find all local maxima\nusing ¼ LC-period neighborhood\n~580 samples at 7.5 kHz]
-    B --> C[Find all local minima\nwith same neighborhood]
-    C --> D[Deduplicate peaks:\nkeep only highest within\nhalf LC-period window]
-    D --> E[Deduplicate valleys:\nkeep only lowest within\nhalf LC-period window]
-    E --> F[Filter: keep peaks where\nv_peak – 5V > 1% of 5V\ni.e. > 50 mV above target]
-    F --> G[Filter: keep valleys where\n5V – v_valley > 1% of 5V\ni.e. > 50 mV below target]
-    G --> H["osc_count = max(#peaks, #valleys)"]
+    A([filtered Vout segment]) --> B["Find all local maxima\nusing 1/4 LC-period neighborhood\n~580 samples at 7.5 kHz"]
+    B --> C["Find all local minima\nwith same neighborhood"]
+    C --> D["Deduplicate peaks:\nkeep only highest within\nhalf LC-period window"]
+    D --> E["Deduplicate valleys:\nkeep only lowest within\nhalf LC-period window"]
+    E --> F["Filter: keep peaks where\nv_peak - 5V > 1% of 5V\ni.e. > 50 mV above target"]
+    F --> G["Filter: keep valleys where\n5V - v_valley > 1% of 5V\ni.e. > 50 mV below target"]
+    G --> H["osc_count = max(num_peaks, num_valleys)"]
     H --> I([Return osc_count])
 ```
 
@@ -260,32 +259,32 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A([OS, US, osc_count]) --> B["score = excess_OS + excess_US\n       + excess_osc × 3"]
+    A([OS, US, osc_count]) --> B["score = excess_OS + excess_US + excess_osc x 3"]
     B --> C{score < best_score?}
-    C -- Yes --> D[Update best_wc, best_phi_m\nreset stall_count]
+    C -- Yes --> D["Update best_wc, best_phi_m\nreset stall_count"]
     C -- No --> E[stall_count += 1]
     D --> F
     E --> G{stall_count >= 5?}
-    G -- Yes --> H{Stuck at wc_min\nwith oscillations?}
-    H -- Yes --> I[Jump: wc = 2 × wc_min\nreset phi_m to initial\n'escape resonance']
-    H -- No --> J[Revert to best_wc, best_phi_m\napply small perturbation]
+    G -- Yes --> H{"Stuck at wc_min\nwith oscillations?"}
+    H -- Yes --> I["Jump: wc = 2 x wc_min\nreset phi_m to initial"]
+    H -- No --> J["Revert to best_wc, best_phi_m\napply small perturbation"]
     I --> K
     J --> K
     G -- No --> F[Evaluate failure modes]
     F --> L{Oscillations?}
-    L -- Yes --> M[phi_m += 0.05·decay\nwc × (1 – 0.05·decay)\nmore damping + lower BW]
+    L -- Yes --> M["phi_m += 0.05*decay\nwc = wc*(1-0.05*decay)\nmore damping + lower BW"]
     L -- No --> N{Overshoot only?}
-    N -- Yes --> O{OS > 2× target?}
-    O -- Yes --> P[wc × (1 – 0.15·decay)\nreduce BW aggressively]
-    O -- No --> Q[phi_m += 0.03·decay\nwc × (1 – 0.05·decay)]
+    N -- Yes --> O{OS > 2x target?}
+    O -- Yes --> P["wc = wc*(1-0.15*decay)\nreduce BW aggressively"]
+    O -- No --> Q["phi_m += 0.03*decay\nwc = wc*(1-0.05*decay)"]
     N -- No --> R{Undershoot only?}
-    R -- Yes --> S[wc × (1 + 0.10·decay)\nincrease bandwidth]
-    R -- No --> T{Both OS & US?}
-    T -- Yes --> U{US > OS × 1.5?}
-    U -- Yes --> V[wc × (1 + 0.08·decay)\nbandwidth-limited]
-    U -- No --> W{OS > US × 1.5?}
-    W -- Yes --> X[wc × (1 – 0.10·decay)]
-    W -- No --> Y[phi_m += 0.04·decay\nresonance issue]
+    R -- Yes --> S["wc = wc*(1+0.10*decay)\nincrease bandwidth"]
+    R -- No --> T{Both OS and US?}
+    T -- Yes --> U{US > OS x 1.5?}
+    U -- Yes --> V["wc = wc*(1+0.08*decay)\nbandwidth-limited"]
+    U -- No --> W{OS > US x 1.5?}
+    W -- Yes --> X["wc = wc*(1-0.10*decay)"]
+    W -- No --> Y["phi_m += 0.04*decay\nresonance issue"]
     M --> K
     P --> K
     Q --> K
@@ -293,7 +292,7 @@ flowchart TD
     V --> K
     X --> K
     Y --> K
-    K[Clamp wc, phi_m to limits] --> Z[Recompute Kp/Ki/Kd/Kf\nanalytically]
+    K["Clamp wc, phi_m to limits"] --> Z["Recompute Kp/Ki/Kd/Kf analytically"]
     Z --> AA([Return new Kp, Ki, Kd, Kf])
 ```
 
