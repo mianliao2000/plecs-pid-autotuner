@@ -188,12 +188,12 @@ class TuningConfig:
     All Kp/Ki/Kd/Kf bounds are derived by sweeping wc and phi_m
     through the compensator design equations.
     """
-    plecs_exe: str = r"C:\Users\liaom\Documents\Plexim\PLECS 5.0 (64 bit)\PLECS.exe"
-    plecs_model: str = r"c:\Users\liaom\Documents\Claude Code\Simulation\Plecs\synchronous buck.plecs"
+    plecs_exe: str = r"C:\Users\liaom\Documents\Plexim\PLECS 4.9 (64 bit)\PLECS.exe"
+    plecs_model: str = str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve())
     rpc_url: str = 'http://127.0.0.1:1080/RPC2'
     model_id: str = "synchronous buck"
-    work_dir: str = r"c:\Users\liaom\Documents\Claude Code\Simulation\Plecs\plecs_tuning_work"
-    results_dir: str = r"c:\Users\liaom\Documents\Claude Code\Simulation\Plecs\results"
+    work_dir: str = str((Path(__file__).resolve().parent / "plecs_tuning_work").resolve())
+    results_dir: str = str((Path(__file__).resolve().parent / "results").resolve())
     target_overshoot: float = 5.0
     target_undershoot: float = 5.0
     max_oscillations: int = 2
@@ -306,6 +306,36 @@ class PlecsModelEditor:
         self.work_dir = Path(work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _downgrade_for_plecs_49(content: str) -> str:
+        """
+        Remove top-level model options that are valid in PLECS 5.x but rejected
+        by PLECS 4.9. This keeps the original model untouched and only adjusts
+        the generated temp copy used for RPC runs.
+        """
+        content = re.sub(r'(^\s*Version\s+")5\.0(")', r'\g<1>4.9\2', content, flags=re.MULTILINE)
+
+        unsupported_fields = [
+            "JacobianComputation",
+            "MixedSignalSolverBypassOperatingPoint",
+            "MixedSignalSolverInitialConditions",
+            "MixedSignalSolverMaxNewtonIterations",
+            "MixedSignalSolverNumThreads",
+            "OperatingPointMaxNewtonIterations",
+            "OperatingPointRelativeNewtonTolerance",
+            "OperatingPointAbsoluteNewtonTolerance",
+            "OperatingPointNodalVoltageNewtonTolerance",
+        ]
+
+        for field in unsupported_fields:
+            content = re.sub(
+                rf'^\s*{re.escape(field)}\s+".*?"\s*\r?\n',
+                '',
+                content,
+                flags=re.MULTILINE,
+            )
+        return content
+
     def modify_params(self, Kp: float, Ki: float, Kd: float, Kf: float) -> str:
         """Modify PID parameters in .plecs file, return path to modified file"""
         with open(self.original_path, 'r', encoding='utf-8') as f:
@@ -322,6 +352,11 @@ class PlecsModelEditor:
             content = re.sub(r'Kp\s*=\s*[\d.e+-]+;', f'Kp = {Kp};', content)
         else:
             content = re.sub(r'Kp"\n"\s*=\s*[\d.e+-]+;', f'Kp = {Kp};"\n"', content)
+
+        # The checked-in model was saved by PLECS 5.0, but this machine has
+        # PLECS 4.9 installed. Strip unsupported 5.x-only fields in the temp
+        # copy so the model can still be loaded by the local installation.
+        content = self._downgrade_for_plecs_49(content)
 
         # Write to working directory
         out_path = self.work_dir / "temp_model.plecs"

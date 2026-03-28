@@ -371,6 +371,8 @@ class BuckTunerGui(QMainWindow):
         self._iter_counter = 0
         self._worker: Optional[TunerWorker] = None
         self._thread: Optional[QThread] = None
+        self._run_mode: Optional[str] = None
+        self._auto_tune_completed = False
 
         self._build_ui()
         self._apply_dark_theme()
@@ -550,6 +552,7 @@ class BuckTunerGui(QMainWindow):
         return cfg
 
     def _start_worker(self, config: TuningConfig):
+        self._cleanup_worker()
         self._thread = QThread()
         self._worker = TunerWorker(config)
         self._worker.moveToThread(self._thread)
@@ -560,7 +563,25 @@ class BuckTunerGui(QMainWindow):
         self._run_single_sig.connect(self._worker.run_single)
         self._thread.start()
 
+    def _cleanup_worker(self):
+        if self._worker:
+            self._worker.stop()
+        if self._thread:
+            self._thread.quit()
+            self._thread.wait(3000)
+        self._worker = None
+        self._thread = None
+
     def on_start_auto_tune(self):
+        if self._auto_tune_completed:
+            QMessageBox.information(
+                self,
+                "Auto-Tune Completed",
+                "Auto-tune has already completed. To start over, click Reset to Defaults first.",
+            )
+            self.statusBar().showMessage("Auto-tune already completed.")
+            return
+
         cfg = self._make_config()
         self._results.clear()
         self._waveform_history.clear()
@@ -571,6 +592,7 @@ class BuckTunerGui(QMainWindow):
         self.metrics_canvas._draw_empty()
         self.log_text.clear()
 
+        self._run_mode = "auto"
         self._start_worker(cfg)
         self._set_running(True)
         # Invoke in worker thread
@@ -586,6 +608,7 @@ class BuckTunerGui(QMainWindow):
         Ki = self.spin_ki.value()
         Kd = self.spin_kd.value()
         Kf = self.spin_kf.value()
+        self._run_mode = "single"
         self._set_running(True)
         self._run_single_sig.emit(Kp, Ki, Kd, Kf, self._iter_counter)
 
@@ -612,17 +635,13 @@ class BuckTunerGui(QMainWindow):
 
     def on_reset(self):
         """Stop any running tune and reset everything to defaults."""
-        if self._worker:
-            self._worker.stop()
-        if self._thread:
-            self._thread.quit()
-            self._thread.wait(2000)
-        self._worker = None
-        self._thread = None
+        self._cleanup_worker()
 
         self._results.clear()
         self._waveform_history.clear()
         self._iter_counter = 0
+        self._run_mode = None
+        self._auto_tune_completed = False
 
         # Reset spinboxes to defaults
         cfg = TuningConfig()
@@ -747,11 +766,15 @@ class BuckTunerGui(QMainWindow):
     @pyqtSlot(bool)
     def on_tuning_finished(self, success: bool):
         self._set_running(False)
+        if self._run_mode == "auto":
+            self._auto_tune_completed = True
         if success:
             self.statusBar().showMessage("TUNING SUCCESSFUL")
             self.on_log("=== TUNING SUCCESSFUL ===")
         else:
             self.statusBar().showMessage("Tuning stopped")
+        self._run_mode = None
+        self._cleanup_worker()
 
     @pyqtSlot(str)
     def on_log(self, msg: str):
@@ -776,11 +799,7 @@ class BuckTunerGui(QMainWindow):
         self.spin_kf.setReadOnly(running)
 
     def closeEvent(self, event):
-        if self._worker:
-            self._worker.stop()
-        if self._thread:
-            self._thread.quit()
-            self._thread.wait(3000)
+        self._cleanup_worker()
         event.accept()
 
 
