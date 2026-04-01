@@ -1,9 +1,9 @@
 Plecs {
   Name          "synchronous buck"
-  Version       "5.0"
+  Version       "4.9"
   CircuitModel  "ContStateSpace"
   StartTime     "0.0"
-  TimeSpan      "1e-2"
+  TimeSpan      "1.2e-3"
   Timeout       ""
   Solver        "auto"
   MaxStep       "1e-3"
@@ -30,11 +30,11 @@ Plecs {
   FixedPointDatatypeOverride "1"
   InitializationCommands "% Plant parameters\nVdc = 12;\nVout= 5;\nCout =15e-6"
 ";\nRc= 7.5e-3;\nL= 30e-6;\nRl= 50e-3;\n\nfsw= 250e3;          % Switching fre"
-"quency in Hz\ntd= 20e-9;           % dead-time in s\n\n\nKi = 1;\nKf = 1;\nKp"
-" = 1;\nKd = 1;\n\nclear('jwc','Gvd_wc');"
+"quency in Hz\ntd= 20e-9;           % dead-time in s\n\n\nKi = 35747.497521584"
+"32;\nKf = 777060.8685687226;\nKp = 1.4830330503038385;\nKd = 8.87768746061266"
+"e-06;\n\nclear('jwc','Gvd_wc');"
   InitialState  "1"
   SystemState   ""
-  JacobianComputation "2"
   TaskingMode   "1"
   TaskConfigurations ""
   CodeGenParameterInlining "2"
@@ -56,20 +56,16 @@ Plecs {
   AlgebraicLoopTolerance "1e-6"
   ScriptsDialogGeometry "[534 356 500 244]"
   ScriptsDialogSplitterPos "100"
-  MixedSignalSolverBypassOperatingPoint "1"
-  MixedSignalSolverInitialConditions "2"
-  MixedSignalSolverMaxNewtonIterations "25"
-  MixedSignalSolverNumThreads "-1"
-  OperatingPointMaxNewtonIterations "50"
-  OperatingPointRelativeNewtonTolerance "1e-3"
-  OperatingPointAbsoluteNewtonTolerance "1e-12"
-  OperatingPointNodalVoltageNewtonTolerance "1e-6"
-  SpiceTemperature "27"
-  NetlistParserDetails "2"
-  InvalidNetlistFunctionEvaluationMsg "1"
-  IncompatibleInitialConditionMsg "2"
+  Terminal {
+    Type          Output
+    Index         "1"
+  }
+  Terminal {
+    Type          Output
+    Index         "2"
+  }
   Schematic {
-    Location      [0, 23; 1536, 933]
+    Location      [-1720, 113; -184, 1023]
     ZoomFactor    2.2459
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -103,7 +99,7 @@ Plecs {
       }
       Parameter {
         Variable      "i_init"
-        Value         "0"
+        Value         "Vout/5"
         Show          off
       }
     }
@@ -122,7 +118,7 @@ Plecs {
       }
       Parameter {
         Variable      "v_init"
-        Value         "0"
+        Value         "Vout"
         Show          off
       }
     }
@@ -152,16 +148,15 @@ Plecs {
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-15, -15; 15, 15]
-      Location      [545, 279; 1070, 713]
+      Location      [477, 292; 1002, 744]
       State         "AAAA/wAAAAD9AAAAAgAAAAEAAAB4AAABe/wCAAAAA/sAAAAQAFoAbwBvA"
-"G0AQQByAGUAYQAAAAAA/////wAAAFgA////+wAAABQAUwBhAHYAZQBkAFYAaQBlAHcAcwAAAAAA//"
-"///wAAAGIA////+wAAAAwAVAByAGEAYwBlAHMAAAAAHAAAAXsAAABiAP///wAAAAMAAAMuAAAAdvw"
-"BAAAAAfsAAAAUAEQAYQB0AGEAVwBpAGQAZwBlAHQAAAAAAAAAAy4AAABEAP///wAAAg0AAAGTAAAA"
+"G0AQQByAGUAYQAAAAAA/////wAAAF4A////+wAAABQAUwBhAHYAZQBkAFYAaQBlAHcAcwAAAAAA//"
+"///wAAAGgA////+wAAAAwAVAByAGEAYwBlAHMAAAAAHAAAAXsAAABoAP///wAAAAMAAAMuAAAAdvw"
+"BAAAAAfsAAAAUAEQAYQB0AGEAVwBpAGQAZwBlAHQAAAAAAAAAAy4AAABSAP///wAAAg0AAAGpAAAA"
 "BAAAAAQAAAAIAAAACPwAAAABAAAAAgAAAAEAAAAOAFQAbwBvAGwAQgBhAHIBAAAAAP////8AAAAAA"
 "AAAAA=="
       SavedViews    "AAAAAgAAAAA="
-      HeaderState   "{\"DefaultSecSize\":0,\"FirstSecSize\":147,\"Labels\":[],"
+      HeaderState   "{\"DefaultSecSize\":0,\"FirstSecSize\":133,\"Labels\":[],"
 "\"VisualIdxs\":[]}"
       PlotPalettes  "AAAAAQAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAA"
 "AEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -169,7 +164,7 @@ Plecs {
       TimeRange     "0"
       ScrollingMode "1"
       SingleTimeAxis "1"
-      Open          "0"
+      Open          "1"
       Ts            "-1"
       SampleLimit   "0"
       XAxisLabel    "Time / s"
@@ -255,11 +250,6 @@ Plecs {
         Show          off
       }
       Parameter {
-        Variable      "Np"
-        Value         "1"
-        Show          off
-      }
-      Parameter {
         Variable      "T_init"
         Value         "0"
         Show          off
@@ -291,11 +281,6 @@ Plecs {
       Parameter {
         Variable      "Rth"
         Value         "0"
-        Show          off
-      }
-      Parameter {
-        Variable      "Np"
-        Value         "1"
         Show          off
       }
       Parameter {
@@ -340,7 +325,7 @@ Plecs {
     }
     Component {
       Type          PulseGenerator
-      Name          "1A Load\n@ 200 Hz"
+      Name          "1A Load"
       Show          on
       Position      [490, 145]
       Direction     right
@@ -358,7 +343,7 @@ Plecs {
       }
       Parameter {
         Variable      "f"
-        Value         "200"
+        Value         "1000"
         Show          off
       }
       Parameter {
@@ -368,7 +353,7 @@ Plecs {
       }
       Parameter {
         Variable      "Delay"
-        Value         "0"
+        Value         "4e-4"
         Show          off
       }
       Parameter {
@@ -431,12 +416,11 @@ Plecs {
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-15, -15; 15, 15]
-      Location      [674, 58; 1200, 491]
+      Location      [674, 58; 1200, 500]
       State         "AAAA/wAAAAD9AAAAAgAAAAEAAAC0AAAA8PwCAAAAA/sAAAAQAFoAbwBvA"
-"G0AQQByAGUAYQAAAAAA/////wAAAFgA////+wAAABQAUwBhAHYAZQBkAFYAaQBlAHcAcwIAAATYAA"
-"AByAAAAMgAAAB4+wAAAAwAVAByAGEAYwBlAHMAAAAAAAAAAPAAAABiAP///wAAAAMAAAHnAAAAXPw"
-"BAAAAAfsAAAAUAEQAYQB0AGEAVwBpAGQAZwBlAHQAAAAAAAAAAecAAABEAP///wAAAg4AAAGSAAAA"
+"G0AQQByAGUAYQAAAAAA/////wAAAF4A////+wAAABQAUwBhAHYAZQBkAFYAaQBlAHcAcwIAAATYAA"
+"AByAAAAMgAAAB4+wAAAAwAVAByAGEAYwBlAHMAAAAAAAAAAPAAAABoAP///wAAAAMAAAHnAAAAXPw"
+"BAAAAAfsAAAAUAEQAYQB0AGEAVwBpAGQAZwBlAHQAAAAAAAAAAecAAABSAP///wAAAg4AAAGfAAAA"
 "BAAAAAQAAAAIAAAACPwAAAABAAAAAgAAAAEAAAAOAFQAbwBvAGwAQgBhAHIBAAAAAP////8AAAAAA"
 "AAAAA=="
       SavedViews    "AAAAAgAAAAA="
@@ -791,7 +775,6 @@ Plecs {
       Direction     right
       Flipped       on
       LabelPosition south
-      Frame         [-7, -10; 2, 10]
       Parameter {
         Variable      "Width"
         Value         "2"
@@ -1467,6 +1450,44 @@ Plecs {
         Show          off
       }
     }
+    Component {
+      Type          Output
+      Name          "Vout"
+      Show          on
+      Position      [625, 210]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          on
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "IL"
+      Show          on
+      Position      [625, 250]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          on
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
     Connection {
       Type          Wire
       SrcComponent  "Fixed\nLoad"
@@ -1635,7 +1656,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "1A Load\n@ 200 Hz"
+      SrcComponent  "1A Load"
       SrcTerminal   1
       DstComponent  "S1"
       DstTerminal   3
@@ -1657,9 +1678,16 @@ Plecs {
         DstTerminal   2
       }
       Branch {
-        Points        [555, 320]
-        DstComponent  "Controller"
-        DstTerminal   1
+        Points        [555, 210]
+        Branch {
+          Points        [555, 320]
+          DstComponent  "Controller"
+          DstTerminal   1
+        }
+        Branch {
+          DstComponent  "Vout"
+          DstTerminal   1
+        }
       }
     }
     Connection {
@@ -1680,9 +1708,16 @@ Plecs {
       Type          Signal
       SrcComponent  "Am1"
       SrcTerminal   3
-      Points        [325, 95; 545, 95; 545, 155]
-      DstComponent  "Scope"
-      DstTerminal   1
+      Points        [325, 95; 545, 95; 545, 155; 565, 155]
+      Branch {
+        DstComponent  "Scope"
+        DstTerminal   1
+      }
+      Branch {
+        Points        [565, 250]
+        DstComponent  "IL"
+        DstTerminal   1
+      }
     }
     Annotation {
       Name          "<html><body>\n<p align=\"center\">Synchronous buck conver"

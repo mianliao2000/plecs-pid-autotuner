@@ -14,7 +14,7 @@ import math
 import random
 from pathlib import Path
 import numpy as np
-from auto_tune import TuningConfig, TuningResult, PidTuner, CompensatorDesign
+from auto_tune import TuningConfig, TuningResult, GridRefinePidTuner, CompensatorDesign
 
 RESULTS_DIR = r"c:\Users\liaom\Documents\Claude Code\Simulation\Plecs\results"
 RANDOM_SEED = 42
@@ -140,7 +140,7 @@ class SimulatedTuner:
     def __init__(self):
         self.sim = BuckConverterSimulator()
         self.config = TuningConfig()
-        self.tuner = PidTuner(self.config)
+        self.tuner = GridRefinePidTuner(self.config)
         self.results: list[TuningResult] = []
 
     def calc_metrics(self, Kp, Ki, Kd, Kf):

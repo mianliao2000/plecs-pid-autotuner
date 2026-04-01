@@ -19,25 +19,31 @@ import matplotlib.animation as animation
 import numpy as np
 
 
-RESULTS_DIR = r"c:\Users\liaom\Documents\Claude Code\Simulation\Plecs\results"
+RESULTS_DIR = str((Path(__file__).resolve().parent / "results").resolve())
 TARGET_OS = 5.0
 TARGET_US = 5.0
 
 
-def load_tuning_log() -> List[Dict]:
+def load_tuning_log(results_dir: Optional[str] = None) -> List[Dict]:
     """Load tuning log CSV"""
-    log_path = Path(RESULTS_DIR) / "tuning_log.csv"
+    log_path = Path(results_dir or RESULTS_DIR) / "tuning_log.csv"
     if not log_path.exists():
         return []
 
     with open(log_path, 'r') as f:
         reader = csv.DictReader(f)
-        return list(reader)
+        rows = []
+        for row in reader:
+            iter_val = (row.get('Iter') or '').strip()
+            if not iter_val.isdigit():
+                continue
+            rows.append(row)
+        return rows
 
 
-def load_iter_csv(iter_num: int) -> Tuple[List[str], List[List[float]]]:
+def load_iter_csv(iter_num: int, results_dir: Optional[str] = None) -> Tuple[List[str], List[List[float]]]:
     """Load CSV data for a specific iteration"""
-    csv_path = Path(RESULTS_DIR) / f"iter_{iter_num:03d}.csv"
+    csv_path = Path(results_dir or RESULTS_DIR) / f"iter_{iter_num:03d}.csv"
     if not csv_path.exists():
         return [], []
 
@@ -70,28 +76,39 @@ def get_vout_column(header: List[str]) -> int:
     return 2 if len(header) >= 3 else 1
 
 
+def get_best_iteration_entry(log: List[Dict]) -> Optional[Dict]:
+    """Return the best iteration entry from the tuning log."""
+    if not log:
+        return None
+
+    def key(row: Dict):
+        return (
+            max(float(row['Overshoot']), float(row['Undershoot'])),
+            float(row['Overshoot']) + float(row['Undershoot']),
+            int(row['OscCount']),
+            float(row['SettlingTime']),
+            int(row['Iter']),
+        )
+
+    return min(log, key=key)
+
+
 def plot_animation(output_path: str = None):
     """Generate animated GIF of Vout response evolution across all iterations"""
-    log = load_tuning_log()
+    results_dir = str(Path(output_path).resolve().parent) if output_path else RESULTS_DIR
+    log = load_tuning_log(results_dir)
     if not log:
         print("No tuning log found. Run auto_tune.py first.")
         return
 
     n_iters = len(log)
-    # Show every iteration (up to 30); for large runs subsample to ~30 frames
-    if n_iters <= 30:
-        iterations = list(range(n_iters))
-    else:
-        step = n_iters // 30
-        iterations = list(range(0, n_iters, step))
-        if iterations[-1] != n_iters - 1:
-            iterations.append(n_iters - 1)
+    iterations = list(range(n_iters))
 
     # Pre-load all waveforms to determine axis limits
     all_time, all_vout = [], []
     waveforms = {}
     for idx in iterations:
-        header, data = load_iter_csv(idx)
+        header, data = load_iter_csv(idx, results_dir)
         if data:
             vout_col = get_vout_column(header)
             t = [row[0] * 1000 for row in data]
@@ -184,12 +201,14 @@ def plot_animation(output_path: str = None):
         ax.grid(True, alpha=0.15, color='#8888aa')
 
     ani = animation.FuncAnimation(fig, update, frames=len(iterations),
-                                  interval=800, repeat=True)
+                                  interval=200, repeat=True)
 
     if output_path:
         try:
-            ani.save(output_path, writer='pillow', fps=1.5)
+            ani.save(output_path, writer='pillow', fps=4)
             print(f"Animation saved: {output_path}")
+            best_path = str(Path(output_path).with_name("best_iteration.png"))
+            plot_best_iteration(best_path)
         except Exception as e:
             print(f"Animation save failed: {e}")
     else:
@@ -257,57 +276,52 @@ def plot_path(output_path: str = None):
     plt.close()
 
 
-def plot_final(output_path: str = None):
-    """Plot final iteration Vout response with annotations"""
-    log = load_tuning_log()
-    if not log:
-        print("No tuning log found. Run auto_tune.py first.")
-        return
-
-    final = log[-1]
-    iter_num = len(log) - 1
-
-    header, data = load_iter_csv(iter_num)
+def _plot_iteration(output_path: Optional[str], entry: Dict, title_prefix: str,
+                    results_dir: Optional[str] = None):
+    """Plot one iteration Vout response with annotations."""
+    iter_num = int(entry['Iter'])
+    header, data = load_iter_csv(iter_num, results_dir)
     if not data:
-        print("No CSV data found for final iteration.")
+        print(f"No CSV data found for iteration {iter_num}.")
         return
 
     vout_col = get_vout_column(header)
-    time_vals = [row[0] * 1000 for row in data]  # Convert to ms
+    time_vals = [row[0] * 1000 for row in data]
     vout_vals = [row[vout_col] for row in data]
     il_vals = [row[1] if len(header) >= 3 else 0 for row in data]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
 
-    # Vout plot
     ax1.plot(time_vals, vout_vals, 'b-', linewidth=1.5, label='Vout')
     ax1.axhline(y=5.0, color='gray', linestyle=':', label='Target (5V)')
-    ax1.axhline(y=5.0 * 1.05, color='r', linestyle='--', alpha=0.5, label=f'+5% ({5.0*1.05:.2f}V)')
-    ax1.axhline(y=5.0 * 0.95, color='r', linestyle='--', alpha=0.5, label=f'-5% ({5.0*0.95:.2f}V)')
+    ax1.axhline(y=5.0 * (1 + TARGET_OS / 100), color='r', linestyle='--', alpha=0.5,
+                label=f'+{TARGET_OS:.1f}% ({5.0*(1 + TARGET_OS/100):.2f}V)')
+    ax1.axhline(y=5.0 * (1 - TARGET_US / 100), color='r', linestyle='--', alpha=0.5,
+                label=f'-{TARGET_US:.1f}% ({5.0*(1 - TARGET_US/100):.2f}V)')
 
-    # Mark overshoot/undershoot
     max_v = max(vout_vals)
     min_v = min(vout_vals)
     ax1.annotate(f'Max: {max_v:.3f}V\nOS: {(max_v-5)/5*100:.1f}%',
                  xy=(time_vals[vout_vals.index(max_v)], max_v),
-                 xytext=(time_vals[vout_vals.index(max_v)]+0.5, max_v+0.05),
+                 xytext=(time_vals[vout_vals.index(max_v)] + 0.05, max_v + 0.03),
                  arrowprops=dict(arrowstyle='->', color='red'),
                  fontsize=10, color='red')
 
     ax1.annotate(f'Min: {min_v:.3f}V\nUS: {(5-min_v)/5*100:.1f}%',
                  xy=(time_vals[vout_vals.index(min_v)], min_v),
-                 xytext=(time_vals[vout_vals.index(min_v)]+0.5, min_v-0.1),
+                 xytext=(time_vals[vout_vals.index(min_v)] + 0.05, min_v - 0.06),
                  arrowprops=dict(arrowstyle='->', color='orange'),
                  fontsize=10, color='orange')
 
     ax1.set_ylabel('Output Voltage (V)')
-    ax1.set_title(f"Final Response: Kp={float(final['Kp']):.4f}, "
-                  f"Ki={float(final['Ki']):.4f}, Kd={float(final['Kd']):.4f}, Kf={float(final['Kf']):.4f}")
+    ax1.set_title(
+        f"{title_prefix}: Iter {iter_num}, Kp={float(entry['Kp']):.4f}, "
+        f"Ki={float(entry['Ki']):.4f}, Kd={float(entry['Kd']):.4f}, Kf={float(entry['Kf']):.4f}"
+    )
     ax1.legend(loc='upper right')
     ax1.grid(True, alpha=0.3)
-    ax1.set_xlim(0, 10)
+    ax1.set_xlim(min(time_vals), max(time_vals))
 
-    # Inductor current plot
     if any(il_vals):
         ax2.plot(time_vals, il_vals, 'g-', linewidth=1, label='IL')
         ax2.set_ylabel('Inductor Current (A)')
@@ -315,18 +329,47 @@ def plot_final(output_path: str = None):
         ax2.grid(True, alpha=0.3)
 
     ax2.set_xlabel('Time (ms)')
-    ax2.set_title(f"Tuning Result: OS={float(final['Overshoot']):.1f}%, "
-                  f"US={float(final['Undershoot']):.1f}%, "
-                  f"Osc={final['OscCount']} -> {final['Status']}")
+    ax2.set_title(
+        f"OS={float(entry['Overshoot']):.1f}%, US={float(entry['Undershoot']):.1f}%, "
+        f"Osc={entry['OscCount']} -> {entry['Status']}"
+    )
 
     plt.tight_layout()
 
     if output_path:
         plt.savefig(output_path, dpi=150)
-        print(f"Final plot saved: {output_path}")
+        print(f"Plot saved: {output_path}")
     else:
         plt.show()
     plt.close()
+
+
+def plot_final(output_path: str = None):
+    """Plot final iteration Vout response with annotations"""
+    results_dir = str(Path(output_path).resolve().parent) if output_path else RESULTS_DIR
+    log = load_tuning_log(results_dir)
+    if not log:
+        print("No tuning log found. Run auto_tune.py first.")
+        return
+
+    final = log[-1]
+    _plot_iteration(output_path, final, "Final Response", results_dir)
+
+
+def plot_best_iteration(output_path: str = None):
+    """Plot the best iteration Vout response with annotations."""
+    results_dir = str(Path(output_path).resolve().parent) if output_path else RESULTS_DIR
+    log = load_tuning_log(results_dir)
+    if not log:
+        print("No tuning log found. Run auto_tune.py first.")
+        return
+
+    best = get_best_iteration_entry(log)
+    if best is None:
+        print("No best iteration found.")
+        return
+
+    _plot_iteration(output_path, best, "Best Response", results_dir)
 
 
 def plot_metrics(output_path: str = None):

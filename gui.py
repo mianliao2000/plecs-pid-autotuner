@@ -31,7 +31,7 @@ from matplotlib.figure import Figure
 
 from auto_tune import (
     TuningConfig, AutoTuner, CompensatorDesign, TuningResult,
-    PlecsRpc, PidTuner, ScopeCsvParser, ResponseAnalyzer
+    PlecsRpc, PidTuner, ScopeCsvParser, ResponseAnalyzer, select_best_result
 )
 from analyze import plot_animation, load_iter_csv, get_vout_column
 
@@ -260,6 +260,19 @@ class TunerWorker(QObject):
                 pass
         return time_vals, vout_vals, il_vals
 
+    def _emit_best_summary(self, results: List[TuningResult]) -> Optional[TuningResult]:
+        """Log the best iteration after the full search completes."""
+        best = select_best_result(results)
+        if best is None:
+            return None
+        self.log_message.emit(
+            f"Best iteration: {best.iter_num} | "
+            f"OS={best.overshoot:.2f}% US={best.undershoot:.2f}% "
+            f"Osc={best.osc_count} | "
+            f"Kp={best.Kp:.5f} Ki={best.Ki:.2f} Kd={best.Kd:.2e} Kf={best.Kf:.0f}"
+        )
+        return best
+
     @pyqtSlot()
     def run_auto_tune(self):
         """Main auto-tuning loop with pause/stop support."""
@@ -299,21 +312,15 @@ class TunerWorker(QObject):
                        f"→ {result.status}")
                 self.log_message.emit(msg)
 
-                if result.status == "PASS":
-                    at.save_log()
-                    self.log_message.emit(
-                        f"*** PASS *** Kp={Kp:.5f} Ki={Ki:.2f} "
-                        f"Kd={Kd:.2e} Kf={Kf:.0f}")
-                    self.tuning_finished.emit(True)
-                    return
-
-                Kp, Ki, Kd, Kf = at.tuner.adjust(
-                    Kp, Ki, Kd, Kf,
-                    result.overshoot, result.undershoot, result.osc_count)
+                if i < self.config.max_iterations - 1:
+                    Kp, Ki, Kd, Kf = at.tuner.adjust(
+                        Kp, Ki, Kd, Kf,
+                        result.overshoot, result.undershoot, result.osc_count)
 
             at.save_log()
+            best = self._emit_best_summary(at.results)
             self.log_message.emit("Max iterations reached.")
-            self.tuning_finished.emit(False)
+            self.tuning_finished.emit(best is not None and best.status == "PASS")
 
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -429,7 +436,7 @@ class BuckTunerGui(QMainWindow):
         self.spin_tgt_os = self._make_spin("Target OS%:", 0, 50, 1, 0.5, 5.0, tgt_layout)
         self.spin_tgt_us = self._make_spin("Target US%:", 0, 50, 1, 0.5, 5.0, tgt_layout)
         self.spin_max_osc = self._make_spin("Max Osc:", 0, 20, 0, 1, 2, tgt_layout)
-        self.spin_max_iter = self._make_spin("Max Iter:", 1, 200, 0, 5, 30, tgt_layout)
+        self.spin_max_iter = self._make_spin("Max Iter:", 1, 200, 0, 5, 60, tgt_layout)
         left_layout.addWidget(grp_tgt)
 
         # Controls
@@ -763,16 +770,47 @@ class BuckTunerGui(QMainWindow):
             f"OS={result.overshoot:.1f}% US={result.undershoot:.1f}% "
             f"Osc={result.osc_count}")
 
+    def _show_best_iteration(self):
+        """Switch plots and parameter fields to the best iteration found."""
+        best = select_best_result(self._results)
+        if best is None:
+            return
+        best_idx = next(
+            (idx for idx, item in enumerate(self._waveform_history)
+             if item['result'].iter_num == best.iter_num),
+            None,
+        )
+        if best_idx is None:
+            return
+
+        self.spin_kp.setValue(best.Kp)
+        self.spin_ki.setValue(best.Ki)
+        self.spin_kd.setValue(best.Kd)
+        self.spin_kf.setValue(best.Kf)
+        self.waveform_canvas.update_plot(
+            self._waveform_history, best_idx,
+            target_os=self.spin_tgt_os.value(),
+            target_us=self.spin_tgt_us.value())
+        self.metrics_canvas.update_metrics(self._results)
+        self.statusBar().showMessage(
+            f"Best iter {best.iter_num} | {best.status} | "
+            f"OS={best.overshoot:.2f}% US={best.undershoot:.2f}% Osc={best.osc_count}"
+        )
+        self.on_log(
+            f"Showing best iteration {best.iter_num}: "
+            f"OS={best.overshoot:.2f}% US={best.undershoot:.2f}% Osc={best.osc_count}"
+        )
+
     @pyqtSlot(bool)
     def on_tuning_finished(self, success: bool):
         self._set_running(False)
         if self._run_mode == "auto":
             self._auto_tune_completed = True
+            self._show_best_iteration()
         if success:
-            self.statusBar().showMessage("TUNING SUCCESSFUL")
-            self.on_log("=== TUNING SUCCESSFUL ===")
+            self.on_log("=== SEARCH COMPLETE: best iteration meets target ===")
         else:
-            self.statusBar().showMessage("Tuning stopped")
+            self.on_log("=== SEARCH COMPLETE: showing best iteration found ===")
         self._run_mode = None
         self._cleanup_worker()
 

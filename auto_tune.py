@@ -44,6 +44,33 @@ class TuningResult:
     status: str  # "PASS" or "FAIL"
 
 
+def result_priority(result: TuningResult) -> Tuple[float, float, int, float, int]:
+    """
+    Rank iterations by how small and balanced OS/US are.
+
+    Priority order:
+    1. Smaller worst-case deviation between OS and US
+    2. Smaller combined OS + US
+    3. Fewer oscillations
+    4. Faster settling
+    5. Earlier iteration number
+    """
+    return (
+        max(result.overshoot, result.undershoot),
+        result.overshoot + result.undershoot,
+        result.osc_count,
+        result.settling_time,
+        result.iter_num,
+    )
+
+
+def select_best_result(results: List[TuningResult]) -> Optional[TuningResult]:
+    """Return the best iteration seen so far."""
+    if not results:
+        return None
+    return min(results, key=result_priority)
+
+
 @dataclass
 class PlantParams:
     """Buck converter plant parameters"""
@@ -192,12 +219,17 @@ class TuningConfig:
     plecs_model: str = str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve())
     rpc_url: str = 'http://127.0.0.1:1080/RPC2'
     model_id: str = "synchronous buck"
-    work_dir: str = str((Path(__file__).resolve().parent / "plecs_tuning_work").resolve())
     results_dir: str = str((Path(__file__).resolve().parent / "results").resolve())
+    sim_time_span: str = "1.2e-3"
+    load_pulse_frequency: str = "1000"
+    load_pulse_duty_cycle: str = "0.5"
+    load_pulse_delay: str = "4e-4"
+    cout_v_init: str = "Vout"
+    inductor_i_init: str = "Vout/5"
     target_overshoot: float = 5.0
     target_undershoot: float = 5.0
     max_oscillations: int = 2
-    max_iterations: int = 30
+    max_iterations: int = 60
     # --- Design variable ranges ---
     # wc: crossover frequency (rad/s)
     #   min: LC resonance w0 ~ 47,140 rad/s (7.5 kHz)
@@ -214,6 +246,14 @@ class TuningConfig:
     phi_m_max: float = 1.3963    # 80 deg
     phi_m_initial: float = 0.5236  # Start at 30 deg — intentionally low phase margin
 
+    def meets_targets(self, overshoot: float, undershoot: float, osc_count: int) -> bool:
+        """Return True when the measured metrics satisfy the user targets."""
+        return (
+            overshoot < self.target_overshoot and
+            undershoot < self.target_undershoot and
+            osc_count <= self.max_oscillations
+        )
+
 
 class PlecsRpc:
     """PLECS XML-RPC interface wrapper"""
@@ -223,6 +263,7 @@ class PlecsRpc:
         self.plecs_exe = plecs_exe
         self.model_id = model_id
         self.server: Optional[x.ServerProxy] = None
+        self.loaded_model_path: Optional[Path] = None
 
     def connect(self, retries: int = 20, delay: float = 1.0) -> 'PlecsRpc':
         """Connect to PLECS RPC server"""
@@ -251,19 +292,55 @@ class PlecsRpc:
             self.connect(retries=30, delay=1.0)
             return True
 
-    def load_model(self, model_path: str) -> None:
-        """Load model, closing any existing model with the same name first"""
-        self.model_id = Path(model_path).stem
+    def load_model(self, model_path: str, force_reload: bool = False) -> None:
+        """Load a model once and reuse it unless an explicit reload is requested."""
+        resolved_path = Path(model_path).resolve()
+        self.model_id = resolved_path.stem
         stats = self.server.plecs.statistics()
-        ids = [m['id'] for m in stats.get('models', [])]
-        if self.model_id in ids:
+        loaded = {
+            m['id']: Path(m['filename']).resolve()
+            for m in stats.get('models', [])
+            if 'id' in m and 'filename' in m
+        }
+        if not force_reload and loaded.get(self.model_id) == resolved_path:
+            self.loaded_model_path = resolved_path
+            return
+        if force_reload and self.model_id in loaded:
             try:
                 self.server.plecs.close(self.model_id)
                 time.sleep(0.3)
             except Exception:
                 pass
-        self.server.plecs.load(str(Path(model_path).resolve()))
+        self.server.plecs.load(str(resolved_path))
+        self.loaded_model_path = resolved_path
         time.sleep(1.0)
+
+    def find_loaded_model_path(self, model_id: str) -> Optional[Path]:
+        """Return the on-disk path of a loaded model, if present."""
+        stats = self.server.plecs.statistics()
+        for model in stats.get('models', []):
+            if model.get('id') == model_id and model.get('filename'):
+                return Path(model['filename']).resolve()
+        return None
+
+    def close_model(self, model_id: str) -> bool:
+        """Close a loaded model if it is currently open."""
+        if self.find_loaded_model_path(model_id) is None:
+            return False
+        try:
+            self.server.plecs.close(model_id)
+            time.sleep(0.3)
+            return True
+        except Exception:
+            return False
+
+    def get_parameter(self, component_path: str, parameter: str):
+        """Read a model or component parameter."""
+        return self.server.plecs.get(component_path, parameter)
+
+    def set_parameter(self, component_path: str, parameter: str, value) -> None:
+        """Write a model or component parameter."""
+        self.server.plecs.set(component_path, parameter, value)
 
     def start_simulation(self) -> None:
         """Start simulation"""
@@ -297,77 +374,54 @@ class PlecsRpc:
             return blob.data
         return blob
 
+    def simulate(self) -> Dict[str, List[List[float]]]:
+        """Run the loaded model and return raw simulation outputs."""
+        return self.server.plecs.simulate(self.model_id)
+
 
 class PlecsModelEditor:
-    """Edit PLECS model file to change parameters"""
-
-    def __init__(self, original_path: str, work_dir: str):
-        self.original_path = Path(original_path)
-        self.work_dir = Path(work_dir)
-        self.work_dir.mkdir(parents=True, exist_ok=True)
+    """Update tunable commands inside the loaded PLECS model."""
 
     @staticmethod
-    def _downgrade_for_plecs_49(content: str) -> str:
-        """
-        Remove top-level model options that are valid in PLECS 5.x but rejected
-        by PLECS 4.9. This keeps the original model untouched and only adjusts
-        the generated temp copy used for RPC runs.
-        """
-        content = re.sub(r'(^\s*Version\s+")5\.0(")', r'\g<1>4.9\2', content, flags=re.MULTILINE)
-
-        unsupported_fields = [
-            "JacobianComputation",
-            "MixedSignalSolverBypassOperatingPoint",
-            "MixedSignalSolverInitialConditions",
-            "MixedSignalSolverMaxNewtonIterations",
-            "MixedSignalSolverNumThreads",
-            "OperatingPointMaxNewtonIterations",
-            "OperatingPointRelativeNewtonTolerance",
-            "OperatingPointAbsoluteNewtonTolerance",
-            "OperatingPointNodalVoltageNewtonTolerance",
-        ]
-
-        for field in unsupported_fields:
-            content = re.sub(
-                rf'^\s*{re.escape(field)}\s+".*?"\s*\r?\n',
-                '',
-                content,
-                flags=re.MULTILINE,
-            )
-        return content
-
-    def modify_params(self, Kp: float, Ki: float, Kd: float, Kf: float) -> str:
-        """Modify PID parameters in .plecs file, return path to modified file"""
-        with open(self.original_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # Replace parameter values with regex
-        # Some params may be split across quoted strings in .plecs format
-        # e.g. Kp"\n" = 1; — handle both normal and split cases
-        content = re.sub(r'Ki\s*=\s*[\d.e+-]+;', f'Ki = {Ki};', content)
-        content = re.sub(r'Kf\s*=\s*[\d.e+-]+;', f'Kf = {Kf};', content)
-        content = re.sub(r'Kd\s*=\s*[\d.e+-]+;', f'Kd = {Kd};', content)
-        # Kp may be split across quoted string boundary: Kp"\n" = value;
-        if re.search(r'Kp\s*=\s*[\d.e+-]+;', content):
-            content = re.sub(r'Kp\s*=\s*[\d.e+-]+;', f'Kp = {Kp};', content)
-        else:
-            content = re.sub(r'Kp"\n"\s*=\s*[\d.e+-]+;', f'Kp = {Kp};"\n"', content)
-
-        # The checked-in model was saved by PLECS 5.0, but this machine has
-        # PLECS 4.9 installed. Strip unsupported 5.x-only fields in the temp
-        # copy so the model can still be loaded by the local installation.
-        content = self._downgrade_for_plecs_49(content)
-
-        # Write to working directory
-        out_path = self.work_dir / "temp_model.plecs"
-        with open(out_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        return str(out_path)
+    def update_initialization_commands(commands: str, Kp: float, Ki: float, Kd: float, Kf: float) -> str:
+        """Update only the controller gains inside a loaded model."""
+        commands = re.sub(r'Ki\s*=\s*[\d.e+-]+;', f'Ki = {Ki};', commands)
+        commands = re.sub(r'Kf\s*=\s*[\d.e+-]+;', f'Kf = {Kf};', commands)
+        commands = re.sub(r'Kd\s*=\s*[\d.e+-]+;', f'Kd = {Kd};', commands)
+        commands = re.sub(r'Kp\s*=\s*[\d.e+-]+;', f'Kp = {Kp};', commands)
+        return commands
 
 
 class ScopeCsvParser:
-    """Parse scope CSV data from PLECS"""
+    """Convert between PLECS simulation outputs and the CSV shape used by the GUI."""
+
+    @staticmethod
+    def from_simulation_result(sim_result: Dict[str, List[List[float]]]) -> Tuple[List[str], List[List[float]]]:
+        """
+        Map direct PLECS simulation outputs to the project's canonical table:
+        Time, IL, Vout
+
+        Signal Output 1 is treated as Vout and Signal Output 2 as IL.
+        """
+        time_vals = sim_result.get('Time', [])
+        values = sim_result.get('Values', [])
+        if len(values) < 2:
+            raise ValueError("PLECS simulate() did not return two signal outputs.")
+
+        vout_vals = values[0]
+        il_vals = values[1]
+        n = min(len(time_vals), len(vout_vals), len(il_vals))
+        header = ["Time", "IL", "Vout"]
+        data = [[time_vals[i], il_vals[i], vout_vals[i]] for i in range(n)]
+        return header, data
+
+    @staticmethod
+    def to_csv_bytes(header: List[str], data: List[List[float]]) -> bytes:
+        """Serialize tabular simulation data to CSV bytes for GUI/history use."""
+        lines = [",".join(header)]
+        for row in data:
+            lines.append(",".join(f"{val:.17g}" for val in row))
+        return ("\n".join(lines) + "\n").encode("utf-8")
 
     @staticmethod
     def parse(csv_data: bytes) -> Tuple[List[str], List[List[float]]]:
@@ -403,13 +457,15 @@ class ResponseAnalyzer:
     """
 
     def __init__(self, v_target: float = 5.0,
-                 transient_window: float = 0.003,
+                 transient_window: float = 0.00035,
                  ripple_filter_cycles: int = 4,
-                 fsw: float = 250e3):
+                 fsw: float = 250e3,
+                 expected_step_times: Optional[List[float]] = None):
         self.v_target = v_target          # Target output voltage (V)
         self.transient_window = transient_window  # How long after step to analyse (s)
         self.ripple_filter_cycles = ripple_filter_cycles
         self.fsw = fsw                    # Switching frequency (Hz)
+        self.expected_step_times = expected_step_times or []
 
     @staticmethod
     def _moving_average(vals: List[float], window: int) -> List[float]:
@@ -466,11 +522,13 @@ class ResponseAnalyzer:
         threshold = jumps[0][0] * 0.3  # at least 30% of the biggest jump
 
         step_times = []
+        duplicate_window = max(8.0 / self.fsw, self.transient_window / 3.0)
         for mag, t in jumps:
             if mag < threshold:
                 break
-            # Avoid duplicates within 1ms
-            if not any(abs(t - st) < 0.001 for st in step_times):
+            # Avoid counting the same edge multiple times while still letting
+            # closely spaced step-up / step-down events survive.
+            if not any(abs(t - st) < duplicate_window for st in step_times):
                 step_times.append(t)
 
         return sorted(step_times)
@@ -535,6 +593,34 @@ class ResponseAnalyzer:
         sig_valleys = [v for _, v in valleys if self.v_target - v >  threshold]
 
         return max(len(sig_peaks), len(sig_valleys))
+
+    def _analyze_single_step(self, time_vals: List[float], vout_raw: List[float],
+                             vout_filt: List[float], step_t: float,
+                             window_end_t: float, ripple_window: int) -> Tuple[float, float, int, float]:
+        """Analyze one transient window and return OS/US/osc/settling metrics."""
+        n = len(time_vals)
+        step_idx = self._find_idx(time_vals, step_t)
+        end_idx = min(self._find_idx(time_vals, window_end_t), n - 1)
+        if end_idx <= step_idx + 5:
+            return 0.0, 0.0, 0, 0.0
+
+        seg_raw = vout_raw[step_idx:end_idx]
+        v_peak = max(seg_raw) if seg_raw else self.v_target
+        v_valley = min(seg_raw) if seg_raw else self.v_target
+        overshoot = max(0.0, (v_peak - self.v_target) / self.v_target * 100)
+        undershoot = max(0.0, (self.v_target - v_valley) / self.v_target * 100)
+        osc_count = self._count_oscillations(vout_filt, time_vals, step_idx, end_idx)
+
+        v_band = self.v_target * 0.02
+        settling_time = max(0.0, window_end_t - step_t)
+        check_block = max(10, ripple_window)
+        for i in range(step_idx, max(step_idx + 1, end_idx - check_block)):
+            block = vout_filt[i:i + check_block]
+            if max(block) < self.v_target + v_band and min(block) > self.v_target - v_band:
+                settling_time = time_vals[i] - step_t
+                break
+
+        return overshoot, undershoot, osc_count, settling_time
 
     def analyze(self, header: List[str], data: List[List[float]]) -> Tuple[float, float, int, float]:
         """
@@ -604,6 +690,71 @@ class ResponseAnalyzer:
         print(f"    [Analyzer] Step@{step_t*1000:.2f}ms | "
               f"raw Vmax={v_peak:.3f} Vmin={v_valley:.3f} | "
               f"OS={overshoot:.1f}% US={undershoot:.1f}% Osc={osc_count}")
+
+        return overshoot, undershoot, osc_count, settling_time
+
+    def analyze(self, header: List[str], data: List[List[float]]) -> Tuple[float, float, int, float]:
+        """
+        Analyze Vout response across the first two meaningful transients
+        after startup and return the worst-case metrics.
+        """
+        if not data or len(data) < 10:
+            return 10.0, 10.0, 5, 0.005
+
+        n = len(data)
+        time_col = 0
+        vout_col = self._find_col(header, 'voltage', 'vout', 'output')
+        if vout_col < 0:
+            vout_col = 2 if len(header) >= 3 else 1
+        il_col = self._find_col(header, 'current', 'il', 'load')
+        if il_col < 0:
+            il_col = 1
+
+        time_vals = [row[time_col] for row in data]
+        vout_raw = [row[vout_col] for row in data]
+        il_vals = [row[il_col] for row in data]
+
+        total_time = time_vals[-1] - time_vals[0]
+        avg_dt = total_time / (n - 1) if n > 1 else 1e-6
+        samples_per_cycle = max(1, int(1.0 / (self.fsw * avg_dt)))
+        ripple_window = samples_per_cycle * self.ripple_filter_cycles
+        vout_filt = self._moving_average(vout_raw, ripple_window)
+
+        if self.expected_step_times:
+            selected_steps = [
+                t for t in self.expected_step_times
+                if time_vals[0] <= t <= time_vals[-1]
+            ]
+        else:
+            step_times = self._detect_step_times(time_vals, il_vals)
+            if not step_times:
+                step_times = [time_vals[n // 2]]
+            sim_duration = time_vals[-1] - time_vals[0]
+            startup_end = time_vals[0] + sim_duration * 0.30
+            steps_after_startup = [t for t in step_times if t > startup_end]
+            selected_steps = steps_after_startup[:2] if steps_after_startup else step_times[-1:]
+
+        step_results = []
+        for idx, step_t in enumerate(selected_steps):
+            next_step_t = selected_steps[idx + 1] if idx + 1 < len(selected_steps) else time_vals[-1]
+            window_end_t = min(step_t + self.transient_window, next_step_t - avg_dt)
+            if window_end_t <= step_t:
+                window_end_t = min(step_t + self.transient_window, time_vals[-1])
+            metrics = self._analyze_single_step(
+                time_vals, vout_raw, vout_filt, step_t, window_end_t, ripple_window
+            )
+            step_results.append((step_t, *metrics))
+
+        overshoot = max((r[1] for r in step_results), default=10.0)
+        undershoot = max((r[2] for r in step_results), default=10.0)
+        osc_count = max((r[3] for r in step_results), default=5)
+        settling_time = max((r[4] for r in step_results), default=self.transient_window)
+
+        summary = " | ".join(
+            f"{step_t*1000:.2f}ms: OS={os:.1f}% US={us:.1f}% Osc={osc}"
+            for step_t, os, us, osc, _ in step_results
+        )
+        print(f"    [Analyzer] {summary}")
 
         return overshoot, undershoot, osc_count, settling_time
 
@@ -755,24 +906,174 @@ class PidTuner:
                 osc_count <= self.config.max_oscillations)
 
 
+class GridRefinePidTuner:
+    """
+    Two-stage tuner:
+    1. Start from a deliberately poor initial point.
+    2. Sweep a coarse wc / phi_m grid.
+    3. Refine locally around the best coarse point.
+    """
+
+    def __init__(self, config: TuningConfig):
+        self.config = config
+        self.compensator = CompensatorDesign()
+        self.wc = config.wc_initial
+        self.phi_m = config.phi_m_initial
+        self.phase = "bootstrap"
+        self.iteration = 0
+        self.best_score = float('inf')
+        self.best_wc = self.wc
+        self.best_phi_m = self.phi_m
+        self.best_pass_score = float('inf')
+        self.best_pass_wc: Optional[float] = None
+        self.best_pass_phi_m: Optional[float] = None
+        self.coarse_candidates = self._build_coarse_candidates()
+        self.local_candidates: List[Tuple[float, float]] = []
+
+    @staticmethod
+    def _linspace(start: float, stop: float, count: int) -> List[float]:
+        if count <= 1:
+            return [start]
+        step = (stop - start) / (count - 1)
+        return [start + i * step for i in range(count)]
+
+    def _clamp_design(self, wc: float, phi_m: float) -> Tuple[float, float]:
+        wc = max(self.config.wc_min, min(wc, self.config.wc_max))
+        phi_m = max(self.config.phi_m_min, min(phi_m, self.config.phi_m_max))
+        return wc, phi_m
+
+    def _score(self, overshoot: float, undershoot: float, osc_count: int) -> float:
+        return (max(0.0, overshoot - self.config.target_overshoot) +
+                max(0.0, undershoot - self.config.target_undershoot) +
+                max(0, osc_count - self.config.max_oscillations) * 3.0)
+
+    def _build_coarse_candidates(self) -> List[Tuple[float, float]]:
+        wc_vals = self._linspace(self.config.wc_min, self.config.wc_max, 5)
+        phi_vals = self._linspace(self.config.phi_m_min, self.config.phi_m_max, 4)
+        candidates: List[Tuple[float, float]] = []
+        initial = self._clamp_design(self.config.wc_initial, self.config.phi_m_initial)
+        for wc in wc_vals:
+            for phi_m in phi_vals:
+                candidate = self._clamp_design(wc, phi_m)
+                if candidate == initial:
+                    continue
+                candidates.append(candidate)
+        return candidates
+
+    def _build_local_candidates(self, center_wc: float, center_phi_m: float) -> List[Tuple[float, float]]:
+        wc_scales = [-0.12, -0.06, 0.0, 0.06, 0.12]
+        phi_offsets = [math.radians(v) for v in (-8.0, -4.0, 0.0, 4.0, 8.0)]
+        center = self._clamp_design(center_wc, center_phi_m)
+        candidates: List[Tuple[float, float]] = []
+        for wc_scale in wc_scales:
+            for phi_delta in phi_offsets:
+                candidate = self._clamp_design(center_wc * (1.0 + wc_scale), center_phi_m + phi_delta)
+                if candidate == center:
+                    continue
+                if candidate not in candidates:
+                    candidates.append(candidate)
+        candidates.append(center)
+        return candidates
+
+    def _record_result(self, overshoot: float, undershoot: float, osc_count: int) -> None:
+        score = self._score(overshoot, undershoot, osc_count)
+        passed = (overshoot < self.config.target_overshoot and
+                  undershoot < self.config.target_undershoot and
+                  osc_count <= self.config.max_oscillations)
+        if score < self.best_score:
+            self.best_score = score
+            self.best_wc = self.wc
+            self.best_phi_m = self.phi_m
+        if passed and score < self.best_pass_score:
+            self.best_pass_score = score
+            self.best_pass_wc = self.wc
+            self.best_pass_phi_m = self.phi_m
+
+    def _set_design(self, wc: float, phi_m: float) -> Tuple[float, float, float, float]:
+        self.wc, self.phi_m = self._clamp_design(wc, phi_m)
+        Kp, Ki, Kd, Kf = self.compensator.compute(self.wc, self.phi_m)
+        print(f"    -> Next design ({self.phase}): wc={self.wc:.0f} rad/s ({self.wc/(2*math.pi):.0f} Hz), "
+              f"phi_m={math.degrees(self.phi_m):.1f} deg")
+        print(f"    -> PID: Kp={Kp:.5f}, Ki={Ki:.2f}, Kd={Kd:.2e}, Kf={Kf:.0f}")
+        return Kp, Ki, Kd, Kf
+
+    def get_initial_params(self) -> Tuple[float, float, float, float]:
+        self.phase = "bootstrap"
+        return self.compensator.compute(self.wc, self.phi_m)
+
+    def adjust(self, Kp: float, Ki: float, Kd: float, Kf: float,
+               overshoot: float, undershoot: float, osc_count: int) -> Tuple[float, float, float, float]:
+        self.iteration += 1
+        self._record_result(overshoot, undershoot, osc_count)
+
+        if self.phase == "bootstrap":
+            self.phase = "coarse_grid"
+            wc, phi_m = self.coarse_candidates.pop(0)
+            print("    -> Bootstrap complete, starting coarse grid search")
+            return self._set_design(wc, phi_m)
+
+        if self.phase == "coarse_grid":
+            if self.coarse_candidates:
+                wc, phi_m = self.coarse_candidates.pop(0)
+                return self._set_design(wc, phi_m)
+
+            seed_wc = self.best_pass_wc if self.best_pass_wc is not None else self.best_wc
+            seed_phi = self.best_pass_phi_m if self.best_pass_phi_m is not None else self.best_phi_m
+            self.local_candidates = self._build_local_candidates(seed_wc, seed_phi)
+            self.phase = "local_refine"
+            print("    -> Coarse grid complete, switching to local refinement")
+            wc, phi_m = self.local_candidates.pop(0)
+            return self._set_design(wc, phi_m)
+
+        if self.local_candidates:
+            wc, phi_m = self.local_candidates.pop(0)
+            return self._set_design(wc, phi_m)
+
+        seed_wc = self.best_pass_wc if self.best_pass_wc is not None else self.best_wc
+        seed_phi = self.best_pass_phi_m if self.best_pass_phi_m is not None else self.best_phi_m
+        self.local_candidates = self._build_local_candidates(seed_wc, seed_phi)
+        print("    -> Refinement ring exhausted, recentering around best point")
+        wc, phi_m = self.local_candidates.pop(0)
+        return self._set_design(wc, phi_m)
+
+    def check_pass(self, overshoot: float, undershoot: float, osc_count: int) -> bool:
+        metrics_pass = (overshoot < self.config.target_overshoot and
+                        undershoot < self.config.target_undershoot and
+                        osc_count <= self.config.max_oscillations)
+        return metrics_pass and self.phase == "local_refine"
+
+
 class AutoTuner:
     """Main auto-tuning orchestrator"""
 
     def __init__(self, config: TuningConfig = None):
         self.config = config or TuningConfig()
+        step_up_t = float(self.config.load_pulse_delay)
+        step_down_t = step_up_t + float(self.config.load_pulse_duty_cycle) / float(self.config.load_pulse_frequency)
         self.plecs = PlecsRpc(
             self.config.rpc_url,
             plecs_exe=self.config.plecs_exe,
             model_id=self.config.model_id
         )
-        self.model_editor = PlecsModelEditor(
-            self.config.plecs_model,
-            self.config.work_dir
+        self.model_editor = PlecsModelEditor()
+        self.analyzer = ResponseAnalyzer(
+            v_target=5.0,
+            fsw=250e3,
+            expected_step_times=[step_up_t, step_down_t],
         )
-        self.analyzer = ResponseAnalyzer(v_target=5.0, fsw=250e3)
-        self.tuner = PidTuner(self.config)
+        self.tuner = GridRefinePidTuner(self.config)
         self.csv_parser = ScopeCsvParser()
         self.results: List[TuningResult] = []
+
+    def _apply_fast_transient_settings(self) -> None:
+        """Configure the loaded model for short step-up/step-down tests."""
+        model_id = self.plecs.model_id
+        self.plecs.set_parameter(model_id, "TimeSpan", self.config.sim_time_span)
+        self.plecs.set_parameter(f"{model_id}/Cout", "v_init", self.config.cout_v_init)
+        self.plecs.set_parameter(f"{model_id}/L1", "i_init", self.config.inductor_i_init)
+        self.plecs.set_parameter(f"{model_id}/1A Load\n@ 200 Hz", "f", self.config.load_pulse_frequency)
+        self.plecs.set_parameter(f"{model_id}/1A Load\n@ 200 Hz", "DutyCycle", self.config.load_pulse_duty_cycle)
+        self.plecs.set_parameter(f"{model_id}/1A Load\n@ 200 Hz", "Delay", self.config.load_pulse_delay)
 
     def setup(self) -> None:
         """Initialize PLECS connection and results directory"""
@@ -787,47 +1088,56 @@ class AutoTuner:
         print("\n[1] Connecting to PLECS...")
         self.plecs.ensure_plecs_running()
 
+        target_model_path = Path(self.config.plecs_model).resolve()
+        loaded_path = self.plecs.find_loaded_model_path(self.config.model_id)
+        if loaded_path is None:
+            print(f"  Opening source model...")
+            self.plecs.load_model(str(target_model_path))
+        else:
+            self.plecs.model_id = self.config.model_id
+            self.plecs.loaded_model_path = loaded_path
+        self._apply_fast_transient_settings()
+
     def run_iteration(self, iter_num: int, Kp: float, Ki: float,
                       Kd: float, Kf: float) -> TuningResult:
         """Run a single tuning iteration"""
         print(f"\n[Iteration {iter_num}]")
         print(f"  Parameters: Kp={Kp:.5f}, Ki={Ki:.2f}, Kd={Kd:.2e}, Kf={Kf:.0f}")
 
-        # Modify .plecs file
-        model_path = self.model_editor.modify_params(Kp, Ki, Kd, Kf)
+        loaded_path = self.plecs.find_loaded_model_path(self.config.model_id)
 
-        # Load model
-        print(f"  Loading model...")
-        self.plecs.load_model(model_path)
-        time.sleep(0.5)
+        if loaded_path is None:
+            target_model_path = Path(self.config.plecs_model).resolve()
+            print(f"  Source model not open, reopening...")
+            self.plecs.load_model(str(target_model_path), force_reload=True)
+        else:
+            self.plecs.model_id = self.config.model_id
+            self.plecs.loaded_model_path = loaded_path
+            print(f"  Updating parameters in loaded model...")
 
-        # Run simulation
+        self._apply_fast_transient_settings()
+        init_cmds = self.plecs.get_parameter(self.plecs.model_id, "InitializationCommands")
+        updated_cmds = self.model_editor.update_initialization_commands(init_cmds, Kp, Ki, Kd, Kf)
+        self.plecs.set_parameter(self.plecs.model_id, "InitializationCommands", updated_cmds)
+
+        # Run simulation and read direct signal outputs.
         print(f"  Running simulation...")
         try:
-            self.plecs.start_simulation()
-            self.plecs.wait_simulation_done()
+            sim_result = self.plecs.simulate()
+            header, data = self.csv_parser.from_simulation_result(sim_result)
+            csv_data = self.csv_parser.to_csv_bytes(header, data)
         except Exception as e:
-            print(f"  Simulation error: {e}")
-            return TuningResult(iter_num, Kp, Ki, Kd, Kf, 10, 10, 5, 0.005, "FAIL")
-
-        # Export scope CSV (use actual loaded model_id, not config)
-        scope_path = f'{self.plecs.model_id}/Scope'
-        print(f"  Exporting scope data...")
-        try:
-            csv_data = self.plecs.get_scope_csv(scope_path)
-        except Exception as e:
-            print(f"  Export error: {e}")
+            print(f"  Simulation/export error: {e}")
             return TuningResult(iter_num, Kp, Ki, Kd, Kf, 10, 10, 5, 0.005, "FAIL")
 
         # Save CSV for this iteration
         csv_path = Path(self.config.results_dir) / f"iter_{iter_num:03d}.csv"
         csv_path.write_bytes(csv_data)
 
-        # Parse and analyze
-        header, data = self.csv_parser.parse(csv_data)
+        # Analyze direct simulation outputs
         overshoot, undershoot, osc_count, settling_time = self.analyzer.analyze(header, data)
 
-        status = "PASS" if self.tuner.check_pass(overshoot, undershoot, osc_count) else "FAIL"
+        status = "PASS" if self.config.meets_targets(overshoot, undershoot, osc_count) else "FAIL"
 
         result = TuningResult(
             iter_num=iter_num,
@@ -847,6 +1157,7 @@ class AutoTuner:
     def save_log(self) -> None:
         """Save tuning log to CSV"""
         log_path = Path(self.config.results_dir) / "tuning_log.csv"
+        best_result = select_best_result(self.results)
         with open(log_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(['Iter', 'Kp', 'Ki', 'Kd', 'Kf',
@@ -856,6 +1167,21 @@ class AutoTuner:
                 writer.writerow([r.iter_num, r.Kp, r.Ki, r.Kd, r.Kf,
                                r.overshoot, r.undershoot, r.osc_count,
                                r.settling_time, r.status])
+            if best_result is not None:
+                writer.writerow([])
+                writer.writerow([
+                    'BestIter',
+                    best_result.iter_num,
+                    best_result.Kp,
+                    best_result.Ki,
+                    best_result.Kd,
+                    best_result.Kf,
+                    best_result.overshoot,
+                    best_result.undershoot,
+                    best_result.osc_count,
+                    best_result.settling_time,
+                    best_result.status,
+                ])
         print(f"\n[Log] Saved to {log_path}")
 
     def tune(self) -> Optional[TuningResult]:
@@ -886,29 +1212,29 @@ class AutoTuner:
             result = self.run_iteration(i, Kp, Ki, Kd, Kf)
             self.results.append(result)
 
-            if result.status == "PASS":
-                print("\n" + "=" * 60)
-                print("*** TUNING SUCCESSFUL ***")
-                print(f"Design: wc={self.tuner.wc:.0f} rad/s "
-                      f"({self.tuner.wc/(2*math.pi):.0f} Hz), "
-                      f"phi_m={math.degrees(self.tuner.phi_m):.1f} deg")
-                print(f"Final: Kp={Kp:.5f}, Ki={Ki:.2f}, Kd={Kd:.2e}, Kf={Kf:.0f}")
-                print(f"Overshoot={result.overshoot:.2f}%, "
-                      f"Undershoot={result.undershoot:.2f}%, "
-                      f"Oscillations={result.osc_count}")
-                print("=" * 60)
-                self.save_log()
-                return result
-
             # Adjust parameters for next iteration
-            Kp, Ki, Kd, Kf = self.tuner.adjust(
-                Kp, Ki, Kd, Kf,
-                result.overshoot, result.undershoot, result.osc_count
-            )
+            if i < self.config.max_iterations - 1:
+                Kp, Ki, Kd, Kf = self.tuner.adjust(
+                    Kp, Ki, Kd, Kf,
+                    result.overshoot, result.undershoot, result.osc_count
+                )
 
         print(f"\nMax iterations ({self.config.max_iterations}) reached")
+        best_result = select_best_result(self.results)
+        if best_result is not None:
+            print("\n" + "=" * 60)
+            print("*** BEST ITERATION AFTER FULL SEARCH ***")
+            print(f"Iteration: {best_result.iter_num}")
+            print(f"Kp={best_result.Kp:.5f}, Ki={best_result.Ki:.2f}, "
+                  f"Kd={best_result.Kd:.2e}, Kf={best_result.Kf:.0f}")
+            print(f"Overshoot={best_result.overshoot:.2f}%, "
+                  f"Undershoot={best_result.undershoot:.2f}%, "
+                  f"Oscillations={best_result.osc_count}, "
+                  f"Settling={best_result.settling_time*1000:.3f} ms")
+            print(f"Status={best_result.status}")
+            print("=" * 60)
         self.save_log()
-        return None
+        return best_result
 
 
 def main():
