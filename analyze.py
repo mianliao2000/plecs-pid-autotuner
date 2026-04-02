@@ -134,6 +134,7 @@ def plot_animation(output_path: str = None):
         ax.set_facecolor('#16213e')
 
         cur_idx = iterations[frame]
+        display_iter = cur_idx + 1
         result = log[cur_idx]
         status = result['Status']
         status_color = '#00ff88' if status == 'PASS' else '#ff6b6b'
@@ -156,7 +157,7 @@ def plot_animation(output_path: str = None):
         # --- Current iteration waveform ---
         if cur_idx in waveforms:
             t, v = waveforms[cur_idx]
-            ax.plot(t, v, color=status_color, linewidth=2.0, label=f'Iter {cur_idx} ({status})', zorder=5)
+            ax.plot(t, v, color=status_color, linewidth=2.0, label=f'Iter {display_iter} ({status})', zorder=5)
 
             # Mark peak and valley
             v_peak = max(v)
@@ -190,6 +191,13 @@ def plot_animation(output_path: str = None):
             color=status_color, fontsize=11, fontweight='bold'
         )
 
+        ax.set_title(
+            f"Iteration {display_iter} / {n_iters}  -  "
+            f"Kp={kp_val:.4f}  Ki={ki_val:.1f}  Kd={kd_val:.2e}  Kf={kf_val:.0f}\n"
+            f"OS={os_val:.1f}%  US={us_val:.1f}%  Osc={osc_val}  ->  {status}",
+            color=status_color, fontsize=11, fontweight='bold'
+        )
+
         # Progress bar at bottom
         progress = (frame + 1) / len(iterations)
         ax.annotate('', xy=(t_min + progress * (t_max - t_min), v_min + 0.01),
@@ -201,11 +209,11 @@ def plot_animation(output_path: str = None):
         ax.grid(True, alpha=0.15, color='#8888aa')
 
     ani = animation.FuncAnimation(fig, update, frames=len(iterations),
-                                  interval=200, repeat=True)
+                                  interval=100, repeat=True)
 
     if output_path:
         try:
-            ani.save(output_path, writer='pillow', fps=4)
+            ani.save(output_path, writer='pillow', fps=10)
             print(f"Animation saved: {output_path}")
             best_path = str(Path(output_path).with_name("best_iteration.png"))
             plot_best_iteration(best_path)
@@ -280,6 +288,7 @@ def _plot_iteration(output_path: Optional[str], entry: Dict, title_prefix: str,
                     results_dir: Optional[str] = None):
     """Plot one iteration Vout response with annotations."""
     iter_num = int(entry['Iter'])
+    display_iter = iter_num + 1
     header, data = load_iter_csv(iter_num, results_dir)
     if not data:
         print(f"No CSV data found for iteration {iter_num}.")
@@ -315,7 +324,7 @@ def _plot_iteration(output_path: Optional[str], entry: Dict, title_prefix: str,
 
     ax1.set_ylabel('Output Voltage (V)')
     ax1.set_title(
-        f"{title_prefix}: Iter {iter_num}, Kp={float(entry['Kp']):.4f}, "
+        f"{title_prefix}: Iter {display_iter}, Kp={float(entry['Kp']):.4f}, "
         f"Ki={float(entry['Ki']):.4f}, Kd={float(entry['Kd']):.4f}, Kf={float(entry['Kf']):.4f}"
     )
     ax1.legend(loc='upper right')

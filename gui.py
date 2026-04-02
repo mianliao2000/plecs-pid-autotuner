@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QSplitter, QFileDialog, QMessageBox, QLineEdit,
     QProgressBar, QSizePolicy, QScrollArea
 )
-from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, Qt
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, Qt, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QPalette
 
 import matplotlib
@@ -45,7 +45,7 @@ class WaveformCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(9, 4), dpi=90)
-        self.fig.patch.set_facecolor('#1a1a2e')
+        self.fig.patch.set_facecolor('#141416')
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -58,21 +58,21 @@ class WaveformCanvas(FigureCanvasQTAgg):
         v_us = v_tgt * (1 - target_us / 100)
         ax = self.ax
         ax.clear()
-        ax.set_facecolor('#16213e')
-        ax.axhspan(v_tgt, v_os, color='#ff6b6b', alpha=0.12)
-        ax.axhspan(v_us, v_tgt, color='#ffa500', alpha=0.12)
-        ax.axhline(y=v_os, color='#ff6b6b', linestyle='--', lw=0.8, alpha=0.6)
-        ax.axhline(y=v_us, color='#ffa500', linestyle='--', lw=0.8, alpha=0.6)
-        ax.axhline(y=v_tgt, color='#aaa', linestyle=':', lw=1.0, alpha=0.7)
+        ax.set_facecolor('#1c1c1f')
+        ax.axhspan(v_tgt, v_os, color='#f05050', alpha=0.10)
+        ax.axhspan(v_us, v_tgt, color='#e0a030', alpha=0.10)
+        ax.axhline(y=v_os, color='#f05050', linestyle='--', lw=0.8, alpha=0.6)
+        ax.axhline(y=v_us, color='#e0a030', linestyle='--', lw=0.8, alpha=0.6)
+        ax.axhline(y=v_tgt, color='#707076', linestyle=':', lw=1.0, alpha=0.7)
         ax.set_xlim(0, 10)
         ax.set_ylim(max(3.8, v_us - 0.2), min(6.2, v_os + 0.2))
-        ax.set_xlabel('Time (ms)', color='#ccc', fontsize=10)
-        ax.set_ylabel('Output Voltage (V)', color='#ccc', fontsize=10)
-        ax.set_title('Waiting for iteration...', color='#888', fontsize=11)
-        ax.tick_params(colors='#ccc')
+        ax.set_xlabel('Time (ms)', color='#9a9aa0', fontsize=10)
+        ax.set_ylabel('Output Voltage (V)', color='#9a9aa0', fontsize=10)
+        ax.set_title('Waiting for iteration...', color='#707076', fontsize=11)
+        ax.tick_params(colors='#9a9aa0')
         for sp in ax.spines.values():
-            sp.set_edgecolor('#444466')
-        ax.grid(True, alpha=0.15, color='#8888aa')
+            sp.set_edgecolor('#2a2a2e')
+        ax.grid(True, alpha=0.2, color='#3a3a40')
         self.fig.tight_layout()
         self.draw()
 
@@ -83,28 +83,28 @@ class WaveformCanvas(FigureCanvasQTAgg):
         v_us = v_tgt * (1 - target_us / 100)
         ax = self.ax
         ax.clear()
-        ax.set_facecolor('#16213e')
+        ax.set_facecolor('#1c1c1f')
 
         # OS/US bands with dynamic labels
-        ax.axhspan(v_tgt, v_os, color='#ff6b6b', alpha=0.12,
+        ax.axhspan(v_tgt, v_os, color='#f05050', alpha=0.10,
                    label=f'{target_os:.1f}% OS limit ({v_os:.3f}V)')
-        ax.axhspan(v_us, v_tgt, color='#ffa500', alpha=0.12,
+        ax.axhspan(v_us, v_tgt, color='#e0a030', alpha=0.10,
                    label=f'{target_us:.1f}% US limit ({v_us:.3f}V)')
-        ax.axhline(y=v_os, color='#ff6b6b', linestyle='--', lw=0.8, alpha=0.6)
-        ax.axhline(y=v_us, color='#ffa500', linestyle='--', lw=0.8, alpha=0.6)
-        ax.axhline(y=v_tgt, color='#aaa', linestyle=':', lw=1.0, alpha=0.7)
+        ax.axhline(y=v_os, color='#f05050', linestyle='--', lw=0.8, alpha=0.6)
+        ax.axhline(y=v_us, color='#e0a030', linestyle='--', lw=0.8, alpha=0.6)
+        ax.axhline(y=v_tgt, color='#707076', linestyle=':', lw=1.0, alpha=0.7)
 
         # Ghost traces
         for i in range(current_idx):
             entry = history[i]
             t_ms = [t * 1000 for t in entry['time']]
-            gc = '#00ff88' if entry['result'].status == 'PASS' else '#4488ff'
+            gc = '#00d4aa' if entry['result'].status == 'PASS' else '#5b8af0'
             ax.plot(t_ms, entry['vout'], color=gc, lw=0.6, alpha=0.20)
 
         # Current waveform
         cur = history[current_idx]
         r = cur['result']
-        sc = '#00ff88' if r.status == 'PASS' else '#ff6b6b'
+        sc = '#00d4aa' if r.status == 'PASS' else '#f05050'
         t_ms = [t * 1000 for t in cur['time']]
         vout = cur['vout']
         ax.plot(t_ms, vout, color=sc, lw=2.0, label=f'Iter {r.iter_num} ({r.status})', zorder=5)
@@ -113,27 +113,27 @@ class WaveformCanvas(FigureCanvasQTAgg):
         if vout:
             v_peak = max(vout)
             v_valley = min(vout)
-            ax.scatter([t_ms[vout.index(v_peak)]], [v_peak], color='#ff4444', s=50, zorder=6)
-            ax.scatter([t_ms[vout.index(v_valley)]], [v_valley], color='#ffaa00', s=50, zorder=6)
+            ax.scatter([t_ms[vout.index(v_peak)]], [v_peak], color='#f05050', s=50, zorder=6)
+            ax.scatter([t_ms[vout.index(v_valley)]], [v_valley], color='#e0a030', s=50, zorder=6)
 
         ax.set_xlim(min(t_ms), max(t_ms))
         v_lo = max(3.8, min(vout) - 0.05) if vout else 4.0
         v_hi = min(6.2, max(vout) + 0.05) if vout else 5.6
         ax.set_ylim(v_lo, v_hi)
-        ax.set_xlabel('Time (ms)', color='#ccc', fontsize=10)
-        ax.set_ylabel('Output Voltage (V)', color='#ccc', fontsize=10)
+        ax.set_xlabel('Time (ms)', color='#9a9aa0', fontsize=10)
+        ax.set_ylabel('Output Voltage (V)', color='#9a9aa0', fontsize=10)
         ax.set_title(
             f"Iter {r.iter_num}  —  Kp={r.Kp:.4f}  Ki={r.Ki:.1f}  "
             f"Kd={r.Kd:.2e}  Kf={r.Kf:.0f}\n"
             f"OS={r.overshoot:.1f}%  US={r.undershoot:.1f}%  "
             f"Osc={r.osc_count}  →  {r.status}",
             color=sc, fontsize=10, fontweight='bold')
-        ax.tick_params(colors='#ccc')
+        ax.tick_params(colors='#9a9aa0')
         for sp in ax.spines.values():
-            sp.set_edgecolor('#444466')
-        ax.legend(loc='upper right', facecolor='#1a1a2e', edgecolor='#444466',
-                  labelcolor='#ccc', fontsize=8)
-        ax.grid(True, alpha=0.15, color='#8888aa')
+            sp.set_edgecolor('#2a2a2e')
+        ax.legend(loc='upper right', facecolor='#141416', edgecolor='#2a2a2e',
+                  labelcolor='#9a9aa0', fontsize=8)
+        ax.grid(True, alpha=0.2, color='#3a3a40')
         self.fig.tight_layout()
         self.draw()
 
@@ -142,8 +142,8 @@ class MetricsCanvas(FigureCanvasQTAgg):
     """OS/US line chart and oscillation bar chart."""
 
     def __init__(self, parent=None):
-        self.fig = Figure(figsize=(9, 2.5), dpi=90)
-        self.fig.patch.set_facecolor('#1a1a2e')
+        self.fig = Figure(figsize=(9, 3.8), dpi=90)
+        self.fig.patch.set_facecolor('#141416')
         self.ax_os, self.ax_osc = self.fig.subplots(1, 2)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -152,14 +152,15 @@ class MetricsCanvas(FigureCanvasQTAgg):
     def _draw_empty(self):
         for ax in (self.ax_os, self.ax_osc):
             ax.clear()
-            ax.set_facecolor('#16213e')
-            ax.tick_params(colors='#ccc')
+            ax.set_facecolor('#1c1c1f')
+            ax.tick_params(colors='#9a9aa0')
             for sp in ax.spines.values():
-                sp.set_edgecolor('#444466')
-            ax.grid(True, alpha=0.15, color='#8888aa')
-        self.ax_os.set_title('Overshoot / Undershoot', color='#ccc', fontsize=9)
-        self.ax_osc.set_title('Oscillations', color='#ccc', fontsize=9)
+                sp.set_edgecolor('#2a2a2e')
+            ax.grid(True, alpha=0.2, color='#3a3a40')
+        self.ax_os.set_title('Overshoot / Undershoot', color='#9a9aa0', fontsize=9)
+        self.ax_osc.set_title('Oscillations', color='#9a9aa0', fontsize=9)
         self.fig.tight_layout()
+        self.fig.subplots_adjust(hspace=0.45)
         self.draw()
 
     def update_metrics(self, results: List[TuningResult]):
@@ -172,34 +173,35 @@ class MetricsCanvas(FigureCanvasQTAgg):
 
         ax = self.ax_os
         ax.clear()
-        ax.set_facecolor('#16213e')
-        ax.plot(iters, os_vals, 'r-o', label='OS%', ms=4, lw=1.2)
-        ax.plot(iters, us_vals, color='orange', marker='s', label='US%', ms=4, lw=1.2)
-        ax.axhline(y=5.0, color='#ff6b6b', linestyle='--', alpha=0.5, lw=0.8)
-        ax.set_xlabel('Iteration', color='#ccc', fontsize=8)
-        ax.set_ylabel('%', color='#ccc', fontsize=8)
-        ax.set_title('Overshoot / Undershoot', color='#ccc', fontsize=9)
-        ax.legend(facecolor='#1a1a2e', edgecolor='#444466', labelcolor='#ccc', fontsize=7)
-        ax.tick_params(colors='#ccc', labelsize=8)
+        ax.set_facecolor('#1c1c1f')
+        ax.plot(iters, os_vals, color='#f05050', marker='o', label='OS%', ms=4, lw=1.2)
+        ax.plot(iters, us_vals, color='#e0a030', marker='s', label='US%', ms=4, lw=1.2)
+        ax.axhline(y=5.0, color='#f05050', linestyle='--', alpha=0.5, lw=0.8)
+        ax.set_xlabel('Iteration', color='#9a9aa0', fontsize=8)
+        ax.set_ylabel('%', color='#9a9aa0', fontsize=8)
+        ax.set_title('Overshoot / Undershoot', color='#9a9aa0', fontsize=9)
+        ax.legend(facecolor='#141416', edgecolor='#2a2a2e', labelcolor='#9a9aa0', fontsize=7)
+        ax.tick_params(colors='#9a9aa0', labelsize=8)
         for sp in ax.spines.values():
-            sp.set_edgecolor('#444466')
-        ax.grid(True, alpha=0.15, color='#8888aa')
+            sp.set_edgecolor('#2a2a2e')
+        ax.grid(True, alpha=0.2, color='#3a3a40')
 
         ax2 = self.ax_osc
         ax2.clear()
-        ax2.set_facecolor('#16213e')
-        colors = ['#00ff88' if o <= 2 else '#ff6b6b' for o in osc_vals]
+        ax2.set_facecolor('#1c1c1f')
+        colors = ['#00d4aa' if o <= 2 else '#f05050' for o in osc_vals]
         ax2.bar(iters, osc_vals, color=colors, width=0.8)
-        ax2.axhline(y=2, color='#888', linestyle='--', lw=0.8)
-        ax2.set_xlabel('Iteration', color='#ccc', fontsize=8)
-        ax2.set_ylabel('Count', color='#ccc', fontsize=8)
-        ax2.set_title('Oscillations', color='#ccc', fontsize=9)
-        ax2.tick_params(colors='#ccc', labelsize=8)
+        ax2.axhline(y=2, color='#707076', linestyle='--', lw=0.8)
+        ax2.set_xlabel('Iteration', color='#9a9aa0', fontsize=8)
+        ax2.set_ylabel('Count', color='#9a9aa0', fontsize=8)
+        ax2.set_title('Oscillations', color='#9a9aa0', fontsize=9)
+        ax2.tick_params(colors='#9a9aa0', labelsize=8)
         for sp in ax2.spines.values():
-            sp.set_edgecolor('#444466')
-        ax2.grid(True, alpha=0.15, color='#8888aa')
+            sp.set_edgecolor('#2a2a2e')
+        ax2.grid(True, alpha=0.2, color='#3a3a40')
 
         self.fig.tight_layout()
+        self.fig.subplots_adjust(hspace=0.45)
         self.draw()
 
 
@@ -369,8 +371,8 @@ class BuckTunerGui(QMainWindow):
         super().__init__()
         self.setWindowTitle("PLECS Buck Converter PID Auto-Tuner")
         screen = QApplication.primaryScreen().availableGeometry()
-        w = min(1400, screen.width() - 40)
-        h = min(780, screen.height() - 60)
+        w = min(1500, screen.width() - 40)
+        h = min(940, screen.height() - 60)
         self.resize(w, h)
 
         self._results: List[TuningResult] = []
@@ -380,6 +382,7 @@ class BuckTunerGui(QMainWindow):
         self._thread: Optional[QThread] = None
         self._run_mode: Optional[str] = None
         self._auto_tune_completed = False
+        self._circuit_pixmap: Optional[QPixmap] = None
 
         self._build_ui()
         self._apply_dark_theme()
@@ -403,8 +406,9 @@ class BuckTunerGui(QMainWindow):
         img_layout = QVBoxLayout(grp_img)
         self.circuit_label = QLabel("No image captured")
         self.circuit_label.setAlignment(Qt.AlignCenter)
-        self.circuit_label.setMinimumHeight(100)
-        self.circuit_label.setStyleSheet("background: #16213e; color: #888;")
+        self.circuit_label.setMinimumHeight(180)
+        self.circuit_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.circuit_label.setStyleSheet("background: #1c1c1f; color: #707076;")
         img_layout.addWidget(self.circuit_label)
         btn_capture = QPushButton("Capture from PLECS")
         btn_capture.clicked.connect(self.on_capture_circuit)
@@ -445,10 +449,22 @@ class BuckTunerGui(QMainWindow):
 
         self.btn_start = QPushButton("Start Auto-Tune")
         self.btn_start.clicked.connect(self.on_start_auto_tune)
+        self.btn_start.setStyleSheet(
+            "QPushButton { background: #0a3a30; color: #e8e8eb; border: 1px solid #00d4aa; }"
+            "QPushButton:hover { background: #0f4a3d; }"
+            "QPushButton:pressed { background: #082a22; }"
+            "QPushButton:disabled { background: #1a1a1c; color: #505055; border: 1px solid #2a2a2e; }"
+        )
         ctrl_layout.addWidget(self.btn_start)
 
         self.btn_single = QPushButton("Run Single Iteration")
         self.btn_single.clicked.connect(self.on_run_single)
+        self.btn_single.setStyleSheet(
+            "QPushButton { background: #1a2540; color: #e8e8eb; border: 1px solid #5b8af0; }"
+            "QPushButton:hover { background: #223055; }"
+            "QPushButton:pressed { background: #141d30; }"
+            "QPushButton:disabled { background: #1a1a1c; color: #505055; border: 1px solid #2a2a2e; }"
+        )
         ctrl_layout.addWidget(self.btn_single)
 
         row_ps = QHBoxLayout()
@@ -473,8 +489,8 @@ class BuckTunerGui(QMainWindow):
         self.btn_reset = QPushButton("Reset to Defaults")
         self.btn_reset.clicked.connect(self.on_reset)
         self.btn_reset.setStyleSheet(
-            "QPushButton { background: #3a1a1a; color: #ff9999; border: 1px solid #664444; }"
-            "QPushButton:hover { background: #5a2a2a; }")
+            "QPushButton { background: #2a1518; color: #f07070; border: 1px solid #4a2025; }"
+            "QPushButton:hover { background: #3a2028; }")
         ctrl_layout.addWidget(self.btn_reset)
 
         left_layout.addWidget(grp_ctrl)
@@ -484,16 +500,14 @@ class BuckTunerGui(QMainWindow):
         log_layout = QVBoxLayout(grp_log)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(110)
-        self.log_text.setStyleSheet("background: #0d1117; color: #c9d1d9; font-size: 9pt;")
+        self.log_text.setMinimumHeight(150)
+        self.log_text.setStyleSheet("background: #111113; color: #c0c0c4; font-size: 9.5pt;")
         log_layout.addWidget(self.log_text)
         left_layout.addWidget(grp_log)
 
-        left_layout.addStretch()
-
         left_scroll = QScrollArea()
         left_scroll.setWidget(left_inner)
-        left_scroll.setWidgetResizable(False)
+        left_scroll.setWidgetResizable(True)
         left_scroll.setFixedWidth(350)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -506,12 +520,14 @@ class BuckTunerGui(QMainWindow):
         self.metrics_canvas = MetricsCanvas()
         right_splitter.addWidget(self.waveform_canvas)
         right_splitter.addWidget(self.metrics_canvas)
-        right_splitter.setStretchFactor(0, 3)
-        right_splitter.setStretchFactor(1, 1)
+        self.metrics_canvas.setMinimumHeight(280)
+        right_splitter.setStretchFactor(0, 5)
+        right_splitter.setStretchFactor(1, 3)
         main_layout.addWidget(right_splitter, stretch=1)
 
         # Status bar
         self.statusBar().showMessage("Ready")
+        QTimer.singleShot(0, self._load_default_circuit_image)
 
     def _make_spin(self, label, lo, hi, decimals, step, default, layout):
         row = QHBoxLayout()
@@ -528,22 +544,61 @@ class BuckTunerGui(QMainWindow):
         layout.addLayout(row)
         return spin
 
+    def _set_circuit_pixmap(self, pixmap: QPixmap) -> None:
+        """Render the circuit image fully inside the preview area."""
+        if pixmap.isNull():
+            return
+        self._circuit_pixmap = pixmap
+        target_width = max(1, self.circuit_label.contentsRect().width())
+        if target_width <= 1:
+            target_width = max(1, self.circuit_label.width())
+        scaled = pixmap.scaledToWidth(target_width, Qt.SmoothTransformation)
+        self.circuit_label.setMinimumHeight(scaled.height())
+        self.circuit_label.setMaximumHeight(scaled.height())
+        self.circuit_label.setMinimumSize(QSize(target_width, scaled.height()))
+        scaled = pixmap.scaled(
+            QSize(target_width, scaled.height()),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        self.circuit_label.setPixmap(scaled)
+
+    def _load_default_circuit_image(self) -> None:
+        """Load the checked-in circuit screenshot if it exists."""
+        image_path = Path(__file__).resolve().parent / "synchronous buck.png"
+        if not image_path.exists():
+            return
+        pixmap = QPixmap(str(image_path))
+        if pixmap.isNull():
+            return
+        self._set_circuit_pixmap(pixmap)
+
     def _apply_dark_theme(self):
         self.setStyleSheet("""
-            QMainWindow, QWidget { background: #1a1a2e; color: #e0e0e0; }
-            QGroupBox { border: 1px solid #444466; border-radius: 4px;
-                        margin-top: 6px; padding-top: 10px; color: #aaa; }
+            * { font-family: "Segoe UI", "Inter", sans-serif; }
+            QMainWindow, QWidget { background: #141416; color: #e8e8eb; }
+            QGroupBox { border: 1px solid #2a2a2e; border-radius: 4px;
+                        margin-top: 6px; padding-top: 10px; color: #707076; }
             QGroupBox::title { subcontrol-origin: margin; left: 8px; }
-            QPushButton { background: #2d3a5c; color: #e0e0e0; border: 1px solid #444466;
-                          border-radius: 3px; padding: 3px 8px; }
-            QPushButton:hover { background: #3d4a7c; }
-            QPushButton:disabled { background: #222; color: #555; }
+            QPushButton { background: #1f1f23; color: #e8e8eb; border: 1px solid #3a3a40;
+                          border-radius: 4px; padding: 5px 12px; }
+            QPushButton:hover { background: #2a2a30; }
+            QPushButton:pressed { background: #18181b; }
+            QPushButton:disabled { background: #1a1a1c; color: #505055; }
             QDoubleSpinBox, QSpinBox, QLineEdit {
-                background: #0d1117; color: #c9d1d9; border: 1px solid #444466;
-                border-radius: 2px; padding: 2px 4px; }
-            QLabel { color: #c0c0c0; }
-            QStatusBar { color: #aaa; }
-            QSplitter::handle { background: #444466; height: 3px; }
+                background: #111113; color: #e8e8eb; border: 1px solid #2a2a2e;
+                border-radius: 3px; padding: 3px 5px; }
+            QDoubleSpinBox:focus, QSpinBox:focus, QLineEdit:focus {
+                border: 1px solid #00d4aa; }
+            QLabel { color: #9a9aa0; }
+            QStatusBar { color: #707076; }
+            QSplitter::handle { background: #2a2a2e; height: 3px; }
+            QScrollBar:vertical { background: #141416; width: 8px; border: none; }
+            QScrollBar::handle:vertical { background: #2a2a2e; border-radius: 4px;
+                                          min-height: 20px; }
+            QScrollBar::handle:vertical:hover { background: #3a3a40; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
         """)
 
     # ---- Slots ----
@@ -699,8 +754,7 @@ class BuckTunerGui(QMainWindow):
                     pixmap = QPixmap()
                     pixmap.loadFromData(img_data)
                     if not pixmap.isNull():
-                        self.circuit_label.setPixmap(
-                            pixmap.scaled(320, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                        self._set_circuit_pixmap(pixmap)
                         self.on_log("Circuit image captured from PLECS.")
                         return
             except Exception:
@@ -713,8 +767,7 @@ class BuckTunerGui(QMainWindow):
             self, "Select circuit screenshot", "", "Images (*.png *.jpg *.bmp)")
         if path:
             pixmap = QPixmap(path)
-            self.circuit_label.setPixmap(
-                pixmap.scaled(320, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self._set_circuit_pixmap(pixmap)
             self.on_log(f"Loaded circuit image: {path}")
 
     def on_save_gif(self):
@@ -839,6 +892,11 @@ class BuckTunerGui(QMainWindow):
     def closeEvent(self, event):
         self._cleanup_worker()
         event.accept()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._circuit_pixmap is not None:
+            self._set_circuit_pixmap(self._circuit_pixmap)
 
 
 # Need to import these for QMetaObject invocation

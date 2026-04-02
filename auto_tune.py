@@ -229,7 +229,7 @@ class TuningConfig:
     target_overshoot: float = 5.0
     target_undershoot: float = 5.0
     max_oscillations: int = 2
-    max_iterations: int = 60
+    max_iterations: int = 101
     # --- Design variable ranges ---
     # wc: crossover frequency (rad/s)
     #   min: LC resonance w0 ~ 47,140 rad/s (7.5 kHz)
@@ -1071,9 +1071,9 @@ class AutoTuner:
         self.plecs.set_parameter(model_id, "TimeSpan", self.config.sim_time_span)
         self.plecs.set_parameter(f"{model_id}/Cout", "v_init", self.config.cout_v_init)
         self.plecs.set_parameter(f"{model_id}/L1", "i_init", self.config.inductor_i_init)
-        self.plecs.set_parameter(f"{model_id}/1A Load\n@ 200 Hz", "f", self.config.load_pulse_frequency)
-        self.plecs.set_parameter(f"{model_id}/1A Load\n@ 200 Hz", "DutyCycle", self.config.load_pulse_duty_cycle)
-        self.plecs.set_parameter(f"{model_id}/1A Load\n@ 200 Hz", "Delay", self.config.load_pulse_delay)
+        self.plecs.set_parameter(f"{model_id}/1A Load", "f", self.config.load_pulse_frequency)
+        self.plecs.set_parameter(f"{model_id}/1A Load", "DutyCycle", self.config.load_pulse_duty_cycle)
+        self.plecs.set_parameter(f"{model_id}/1A Load", "Delay", self.config.load_pulse_delay)
 
     def setup(self) -> None:
         """Initialize PLECS connection and results directory"""
