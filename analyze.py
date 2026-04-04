@@ -1,281 +1,234 @@
 """
 Analyze PLECS Buck Converter Tuning Results
-============================================
-Generates visualizations from saved iteration CSV files:
-1. Animation of Vout response evolution
+===========================================
+Uses exported iteration frames and Excel workbooks to generate summaries:
+1. Animation GIF from saved per-iteration images
 2. Parameter tuning path
-3. Final response with annotations
-
-Usage:
-    python analyze.py
+3. Metrics trend
+4. Best/final frame exports
 """
+
+from __future__ import annotations
 
 import csv
 import os
+import shutil
+import zipfile
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import Dict, List, Optional
+from xml.etree import ElementTree as ET
+
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import numpy as np
+from PIL import Image
 
 
 RESULTS_DIR = str((Path(__file__).resolve().parent / "results").resolve())
-TARGET_OS = 5.0
-TARGET_US = 5.0
+TARGET_OS = 4.0
+TARGET_US = 4.0
+
+
+def _xlsx_shared_strings(zf: zipfile.ZipFile) -> List[str]:
+    path = "xl/sharedStrings.xml"
+    if path not in zf.namelist():
+        return []
+    root = ET.fromstring(zf.read(path))
+    ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    strings: List[str] = []
+    for si in root.findall("x:si", ns):
+        parts = [node.text or "" for node in si.findall(".//x:t", ns)]
+        strings.append("".join(parts))
+    return strings
+
+
+def _xlsx_sheet_path(zf: zipfile.ZipFile, sheet_name: str) -> Optional[str]:
+    ns_main = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    ns_rel = {"r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships"}
+    workbook = ET.fromstring(zf.read("xl/workbook.xml"))
+    rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+    rel_map = {
+        rel.attrib["Id"]: rel.attrib["Target"]
+        for rel in rels
+        if rel.tag.endswith("Relationship")
+    }
+    for sheet in workbook.findall("x:sheets/x:sheet", ns_main):
+        if sheet.attrib.get("name") == sheet_name:
+            rel_id = sheet.attrib.get(f"{{{ns_rel['r']}}}id")
+            target = rel_map.get(rel_id)
+            if target:
+                return f"xl/{target}" if not target.startswith("xl/") else target
+    return None
+
+
+def _read_summary_from_xlsx(path: Path) -> List[Dict]:
+    if not path.exists():
+        return []
+    with zipfile.ZipFile(path) as zf:
+        sheet_path = _xlsx_sheet_path(zf, "Summary")
+        if not sheet_path:
+            return []
+        root = ET.fromstring(zf.read(sheet_path))
+        shared = _xlsx_shared_strings(zf)
+        ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        rows: List[List[str]] = []
+        for row in root.findall(".//x:sheetData/x:row", ns):
+            values: List[str] = []
+            for cell in row.findall("x:c", ns):
+                cell_type = cell.attrib.get("t")
+                if cell_type == "inlineStr":
+                    text = "".join(node.text or "" for node in cell.findall(".//x:t", ns))
+                else:
+                    value_node = cell.find("x:v", ns)
+                    raw = value_node.text if value_node is not None else ""
+                    if cell_type == "s" and raw:
+                        idx = int(raw)
+                        text = shared[idx] if idx < len(shared) else raw
+                    else:
+                        text = raw or ""
+                values.append(text)
+            rows.append(values)
+    if len(rows) < 2:
+        return []
+    header = rows[0]
+    out: List[Dict] = []
+    for vals in rows[1:]:
+        if not vals or not vals[0].strip():
+            continue
+        out.append({header[i]: vals[i] if i < len(vals) else "" for i in range(len(header))})
+    return out
 
 
 def load_tuning_log(results_dir: Optional[str] = None) -> List[Dict]:
-    """Load tuning log CSV"""
-    log_path = Path(results_dir or RESULTS_DIR) / "tuning_log.csv"
-    if not log_path.exists():
-        return []
-
-    with open(log_path, 'r') as f:
-        reader = csv.DictReader(f)
-        rows = []
-        for row in reader:
-            iter_val = (row.get('Iter') or '').strip()
-            if not iter_val.isdigit():
-                continue
-            rows.append(row)
+    """Load tuning summary from workbook, with CSV fallback for older runs."""
+    base = Path(results_dir or RESULTS_DIR)
+    workbook_path = base / "time_iterations.xlsx"
+    rows = _read_summary_from_xlsx(workbook_path)
+    if rows:
         return rows
 
-
-def load_iter_csv(iter_num: int, results_dir: Optional[str] = None) -> Tuple[List[str], List[List[float]]]:
-    """Load CSV data for a specific iteration"""
-    csv_path = Path(results_dir or RESULTS_DIR) / f"iter_{iter_num:03d}.csv"
-    if not csv_path.exists():
-        return [], []
-
-    with open(csv_path, 'r') as f:
-        content = f.read()
-
-    lines = content.strip().split('\n')
-    if len(lines) < 2:
-        return [], []
-
-    reader = csv.reader(lines)
-    rows = list(reader)
-    header = rows[0] if rows else []
-    data = []
-    for r in rows[1:]:
-        try:
-            data.append([float(c) for c in r])
-        except ValueError:
-            pass
-    return header, data
-
-
-def get_vout_column(header: List[str]) -> int:
-    """Find Vout column index"""
-    # Try to find Vout by name
-    for i, h in enumerate(header):
-        if 'vout' in h.lower() or 'output' in h.lower():
-            return i
-    # Default: time, IL, Vout pattern
-    return 2 if len(header) >= 3 else 1
+    log_path = base / "tuning_log.csv"
+    if not log_path.exists():
+        return []
+    with open(log_path, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        return [row for row in reader if (row.get("Iter") or "").strip().isdigit()]
 
 
 def get_best_iteration_entry(log: List[Dict]) -> Optional[Dict]:
-    """Return the best iteration entry from the tuning log."""
     if not log:
         return None
 
     def key(row: Dict):
         return (
-            max(float(row['Overshoot']), float(row['Undershoot'])),
-            float(row['Overshoot']) + float(row['Undershoot']),
-            int(row['OscCount']),
-            float(row['SettlingTime']),
-            int(row['Iter']),
+            float(row["Overshoot"]) ** 2 + float(row["Undershoot"]) ** 2,
+            max(float(row["Overshoot"]), float(row["Undershoot"])),
+            float(row["Overshoot"]) + float(row["Undershoot"]),
+            int(row["OscCount"]),
+            float(row["SettlingTime"]),
+            int(row["Iter"]),
         )
 
     return min(log, key=key)
 
 
-def plot_animation(output_path: str = None):
-    """Generate animated GIF of Vout response evolution across all iterations"""
-    results_dir = str(Path(output_path).resolve().parent) if output_path else RESULTS_DIR
-    log = load_tuning_log(results_dir)
-    if not log:
-        print("No tuning log found. Run auto_tune.py first.")
-        return
-
-    n_iters = len(log)
-    iterations = list(range(n_iters))
-
-    # Pre-load all waveforms to determine axis limits
-    all_time, all_vout = [], []
-    waveforms = {}
-    for idx in iterations:
-        header, data = load_iter_csv(idx, results_dir)
-        if data:
-            vout_col = get_vout_column(header)
-            t = [row[0] * 1000 for row in data]
-            v = [row[vout_col] for row in data]
-            waveforms[idx] = (t, v)
-            all_time.extend(t)
-            all_vout.extend(v)
-
-    if not all_vout:
-        print("No waveform data found.")
-        return
-
-    t_min, t_max = min(all_time), max(all_time)
-    v_min = max(4.0, min(all_vout) - 0.05)
-    v_max = min(6.0, max(all_vout) + 0.05)
-
-    fig, ax = plt.subplots(figsize=(13, 6))
-    fig.patch.set_facecolor('#1a1a2e')
-    ax.set_facecolor('#16213e')
-
-    def update(frame):
-        ax.clear()
-        ax.set_facecolor('#16213e')
-
-        cur_idx = iterations[frame]
-        display_iter = cur_idx + 1
-        result = log[cur_idx]
-        status = result['Status']
-        status_color = '#00ff88' if status == 'PASS' else '#ff6b6b'
-
-        # --- 5% OS/US bands ---
-        ax.axhspan(5.0, 5.25, color='#ff6b6b', alpha=0.12, label='5% OS limit')
-        ax.axhspan(4.75, 5.0, color='#ffa500', alpha=0.12, label='5% US limit')
-        ax.axhline(y=5.25, color='#ff6b6b', linestyle='--', linewidth=0.8, alpha=0.6)
-        ax.axhline(y=4.75, color='#ffa500', linestyle='--', linewidth=0.8, alpha=0.6)
-        ax.axhline(y=5.0,  color='#aaaaaa', linestyle=':',  linewidth=1.0, alpha=0.7)
-
-        # --- Ghost traces of all previous iterations ---
-        for prev in iterations[:frame]:
-            if prev in waveforms:
-                pt, pv = waveforms[prev]
-                prev_result = log[prev]
-                ghost_color = '#00ff88' if prev_result['Status'] == 'PASS' else '#4488ff'
-                ax.plot(pt, pv, color=ghost_color, linewidth=0.6, alpha=0.20)
-
-        # --- Current iteration waveform ---
-        if cur_idx in waveforms:
-            t, v = waveforms[cur_idx]
-            ax.plot(t, v, color=status_color, linewidth=2.0, label=f'Iter {display_iter} ({status})', zorder=5)
-
-            # Mark peak and valley
-            v_peak = max(v)
-            v_valley = min(v)
-            t_peak = t[v.index(v_peak)]
-            t_valley = t[v.index(v_valley)]
-            ax.scatter([t_peak],   [v_peak],   color='#ff4444', s=60, zorder=6)
-            ax.scatter([t_valley], [v_valley], color='#ffaa00', s=60, zorder=6)
-
-        # --- Annotations ---
-        os_val  = float(result['Overshoot'])
-        us_val  = float(result['Undershoot'])
-        osc_val = result['OscCount']
-        kp_val  = float(result['Kp'])
-        ki_val  = float(result['Ki'])
-        kd_val  = float(result['Kd'])
-        kf_val  = float(result['Kf'])
-
-        ax.set_xlim(t_min, t_max)
-        ax.set_ylim(v_min, v_max)
-        ax.set_xlabel('Time (ms)', color='#cccccc', fontsize=11)
-        ax.set_ylabel('Output Voltage (V)', color='#cccccc', fontsize=11)
-        ax.tick_params(colors='#cccccc')
-        for spine in ax.spines.values():
-            spine.set_edgecolor('#444466')
-
-        ax.set_title(
-            f"Iteration {cur_idx} / {n_iters - 1}  —  "
-            f"Kp={kp_val:.4f}  Ki={ki_val:.1f}  Kd={kd_val:.2e}  Kf={kf_val:.0f}\n"
-            f"OS={os_val:.1f}%  US={us_val:.1f}%  Osc={osc_val}  →  {status}",
-            color=status_color, fontsize=11, fontweight='bold'
-        )
-
-        ax.set_title(
-            f"Iteration {display_iter} / {n_iters}  -  "
-            f"Kp={kp_val:.4f}  Ki={ki_val:.1f}  Kd={kd_val:.2e}  Kf={kf_val:.0f}\n"
-            f"OS={os_val:.1f}%  US={us_val:.1f}%  Osc={osc_val}  ->  {status}",
-            color=status_color, fontsize=11, fontweight='bold'
-        )
-
-        # Progress bar at bottom
-        progress = (frame + 1) / len(iterations)
-        ax.annotate('', xy=(t_min + progress * (t_max - t_min), v_min + 0.01),
-                    xytext=(t_min, v_min + 0.01),
-                    arrowprops=dict(arrowstyle='-', color='#5566ff', lw=3))
-
-        ax.legend(loc='upper right', facecolor='#1a1a2e', edgecolor='#444466',
-                  labelcolor='#cccccc', fontsize=9)
-        ax.grid(True, alpha=0.15, color='#8888aa')
-
-    ani = animation.FuncAnimation(fig, update, frames=len(iterations),
-                                  interval=100, repeat=True)
-
-    if output_path:
+def _frame_paths(results_dir: Path) -> List[Path]:
+    def frame_key(path: Path) -> int:
+        stem = path.stem
         try:
-            ani.save(output_path, writer='pillow', fps=10)
-            print(f"Animation saved: {output_path}")
-            best_path = str(Path(output_path).with_name("best_iteration.png"))
-            plot_best_iteration(best_path)
-        except Exception as e:
-            print(f"Animation save failed: {e}")
+            return int(stem.replace("iter", ""))
+        except ValueError:
+            return 0
+
+    direct_frames = sorted(results_dir.glob("iter*.png"), key=frame_key)
+    if direct_frames:
+        return direct_frames
+    figures_dir = results_dir / "figures"
+    return sorted(figures_dir.glob("iter*.png"), key=frame_key)
+
+
+def _copy_or_show_frame(frame_path: Path, output_path: Optional[str]) -> None:
+    if not frame_path.exists():
+        print(f"Frame not found: {frame_path}")
+        return
+    if output_path:
+        shutil.copyfile(frame_path, output_path)
+        print(f"Plot saved: {output_path}")
+        return
+    Image.open(frame_path).show()
+
+
+def plot_animation(output_path: str = None):
+    """Generate GIF directly from saved per-iteration frame images."""
+    results_dir = Path(output_path).resolve().parent if output_path else Path(RESULTS_DIR)
+    frames = _frame_paths(results_dir)
+    if not frames:
+        raise FileNotFoundError("No iteration frame images found. Run GUI tuning first.")
+
+    images = [Image.open(path).convert("RGB") for path in frames]
+    if output_path:
+        images[0].save(
+            output_path,
+            save_all=True,
+            append_images=images[1:],
+            duration=250,
+            loop=0,
+            disposal=2,
+            optimize=False,
+        )
+        print(f"Animation saved: {output_path}")
+        best = get_best_iteration_entry(load_tuning_log(str(results_dir)))
+        if best is not None:
+            plot_best_iteration(str(results_dir / "best_iteration.png"))
     else:
-        plt.show()
-    plt.close()
+        images[0].show()
+    for img in images:
+        img.close()
 
 
 def plot_path(output_path: str = None):
-    """Plot parameter tuning path (4 panels)"""
     log = load_tuning_log()
     if not log:
-        print("No tuning log found. Run auto_tune.py first.")
+        print("No tuning summary found. Run GUI tuning first.")
         return
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle('PID Parameter Tuning Path', fontsize=14, fontweight='bold')
+    fig.suptitle("PID Parameter Tuning Path", fontsize=14, fontweight="bold")
 
-    iterations = list(range(len(log)))
-    kp_vals = [float(r['Kp']) for r in log]
-    ki_vals = [float(r['Ki']) for r in log]
-    kd_vals = [float(r['Kd']) for r in log]
-    kf_vals = [float(r['Kf']) for r in log]
-    os_vals = [float(r['Overshoot']) for r in log]
-    us_vals = [float(r['Undershoot']) for r in log]
+    iterations = [int(r["Iter"]) + 1 for r in log]
+    kp_vals = [float(r["Kp"]) for r in log]
+    ki_vals = [float(r["Ki"]) for r in log]
+    kd_vals = [float(r["Kd"]) for r in log]
+    kf_vals = [float(r["Kf"]) for r in log]
+    colors = ["green" if r["Status"] == "PASS" else "red" for r in log]
 
-    colors = ['green' if r['Status'] == 'PASS' else 'red' for r in log]
-
-    # Kp and Ki
     ax1 = axes[0, 0]
-    sc1 = ax1.scatter(iterations, kp_vals, c=colors, s=50)
-    ax1.set_xlabel('Iteration')
-    ax1.set_ylabel('Kp')
-    ax1.set_title('Kp Evolution')
+    ax1.scatter(iterations, kp_vals, c=colors, s=50)
+    ax1.set_xlabel("Iteration")
+    ax1.set_ylabel("Kp")
+    ax1.set_title("Kp Evolution")
     ax1.grid(True, alpha=0.3)
 
     ax2 = axes[0, 1]
     ax2.scatter(iterations, ki_vals, c=colors, s=50)
-    ax2.set_xlabel('Iteration')
-    ax2.set_ylabel('Ki')
-    ax2.set_title('Ki Evolution')
+    ax2.set_xlabel("Iteration")
+    ax2.set_ylabel("Ki")
+    ax2.set_title("Ki Evolution")
     ax2.grid(True, alpha=0.3)
 
-    # Kd and Kf
     ax3 = axes[1, 0]
     ax3.scatter(iterations, kd_vals, c=colors, s=50)
-    ax3.set_xlabel('Iteration')
-    ax3.set_ylabel('Kd')
-    ax3.set_title('Kd Evolution')
+    ax3.set_xlabel("Iteration")
+    ax3.set_ylabel("Kd")
+    ax3.set_title("Kd Evolution")
     ax3.grid(True, alpha=0.3)
 
     ax4 = axes[1, 1]
     ax4.scatter(iterations, kf_vals, c=colors, s=50)
-    ax4.set_xlabel('Iteration')
-    ax4.set_ylabel('Kf')
-    ax4.set_title('Kf Evolution')
+    ax4.set_xlabel("Iteration")
+    ax4.set_ylabel("Kf")
+    ax4.set_title("Kf Evolution")
     ax4.grid(True, alpha=0.3)
 
     plt.tight_layout()
-
     if output_path:
         plt.savefig(output_path, dpi=150)
         print(f"Path plot saved: {output_path}")
@@ -284,141 +237,78 @@ def plot_path(output_path: str = None):
     plt.close()
 
 
-def _plot_iteration(output_path: Optional[str], entry: Dict, title_prefix: str,
-                    results_dir: Optional[str] = None):
-    """Plot one iteration Vout response with annotations."""
-    iter_num = int(entry['Iter'])
-    display_iter = iter_num + 1
-    header, data = load_iter_csv(iter_num, results_dir)
-    if not data:
-        print(f"No CSV data found for iteration {iter_num}.")
-        return
-
-    vout_col = get_vout_column(header)
-    time_vals = [row[0] * 1000 for row in data]
-    vout_vals = [row[vout_col] for row in data]
-    il_vals = [row[1] if len(header) >= 3 else 0 for row in data]
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
-
-    ax1.plot(time_vals, vout_vals, 'b-', linewidth=1.5, label='Vout')
-    ax1.axhline(y=5.0, color='gray', linestyle=':', label='Target (5V)')
-    ax1.axhline(y=5.0 * (1 + TARGET_OS / 100), color='r', linestyle='--', alpha=0.5,
-                label=f'+{TARGET_OS:.1f}% ({5.0*(1 + TARGET_OS/100):.2f}V)')
-    ax1.axhline(y=5.0 * (1 - TARGET_US / 100), color='r', linestyle='--', alpha=0.5,
-                label=f'-{TARGET_US:.1f}% ({5.0*(1 - TARGET_US/100):.2f}V)')
-
-    max_v = max(vout_vals)
-    min_v = min(vout_vals)
-    ax1.annotate(f'Max: {max_v:.3f}V\nOS: {(max_v-5)/5*100:.1f}%',
-                 xy=(time_vals[vout_vals.index(max_v)], max_v),
-                 xytext=(time_vals[vout_vals.index(max_v)] + 0.05, max_v + 0.03),
-                 arrowprops=dict(arrowstyle='->', color='red'),
-                 fontsize=10, color='red')
-
-    ax1.annotate(f'Min: {min_v:.3f}V\nUS: {(5-min_v)/5*100:.1f}%',
-                 xy=(time_vals[vout_vals.index(min_v)], min_v),
-                 xytext=(time_vals[vout_vals.index(min_v)] + 0.05, min_v - 0.06),
-                 arrowprops=dict(arrowstyle='->', color='orange'),
-                 fontsize=10, color='orange')
-
-    ax1.set_ylabel('Output Voltage (V)')
-    ax1.set_title(
-        f"{title_prefix}: Iter {display_iter}, Kp={float(entry['Kp']):.4f}, "
-        f"Ki={float(entry['Ki']):.4f}, Kd={float(entry['Kd']):.4f}, Kf={float(entry['Kf']):.4f}"
-    )
-    ax1.legend(loc='upper right')
-    ax1.grid(True, alpha=0.3)
-    ax1.set_xlim(min(time_vals), max(time_vals))
-
-    if any(il_vals):
-        ax2.plot(time_vals, il_vals, 'g-', linewidth=1, label='IL')
-        ax2.set_ylabel('Inductor Current (A)')
-        ax2.legend(loc='upper right')
-        ax2.grid(True, alpha=0.3)
-
-    ax2.set_xlabel('Time (ms)')
-    ax2.set_title(
-        f"OS={float(entry['Overshoot']):.1f}%, US={float(entry['Undershoot']):.1f}%, "
-        f"Osc={entry['OscCount']} -> {entry['Status']}"
-    )
-
-    plt.tight_layout()
-
-    if output_path:
-        plt.savefig(output_path, dpi=150)
-        print(f"Plot saved: {output_path}")
-    else:
-        plt.show()
-    plt.close()
+def _plot_iteration(output_path: Optional[str], entry: Dict, results_dir: Optional[str] = None):
+    iter_num = int(entry["Iter"])
+    base = Path(results_dir or RESULTS_DIR)
+    frame_path = base / f"iter{iter_num + 1}.png"
+    if not frame_path.exists():
+        frame_path = base / "figures" / f"iter{iter_num + 1}.png"
+    _copy_or_show_frame(frame_path, output_path)
 
 
 def plot_final(output_path: str = None):
-    """Plot final iteration Vout response with annotations"""
     results_dir = str(Path(output_path).resolve().parent) if output_path else RESULTS_DIR
     log = load_tuning_log(results_dir)
     if not log:
-        print("No tuning log found. Run auto_tune.py first.")
+        print("No tuning summary found. Run GUI tuning first.")
         return
-
-    final = log[-1]
-    _plot_iteration(output_path, final, "Final Response", results_dir)
+    _plot_iteration(output_path, log[-1], results_dir)
 
 
 def plot_best_iteration(output_path: str = None):
-    """Plot the best iteration Vout response with annotations."""
     results_dir = str(Path(output_path).resolve().parent) if output_path else RESULTS_DIR
     log = load_tuning_log(results_dir)
     if not log:
-        print("No tuning log found. Run auto_tune.py first.")
+        print("No tuning summary found. Run GUI tuning first.")
         return
-
     best = get_best_iteration_entry(log)
     if best is None:
         print("No best iteration found.")
         return
-
-    _plot_iteration(output_path, best, "Best Response", results_dir)
+    _plot_iteration(output_path, best, results_dir)
 
 
 def plot_metrics(output_path: str = None):
-    """Plot overshoot/undershoot/oscillation over iterations"""
     log = load_tuning_log()
     if not log:
-        print("No tuning log found. Run auto_tune.py first.")
+        print("No tuning summary found. Run GUI tuning first.")
         return
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
 
-    iterations = list(range(len(log)))
-    os_vals = [float(r['Overshoot']) for r in log]
-    us_vals = [float(r['Undershoot']) for r in log]
-    osc_vals = [int(r['OscCount']) for r in log]
+    iterations = [int(r["Iter"]) + 1 for r in log]
+    os_vals = [float(r["Overshoot"]) for r in log]
+    us_vals = [float(r["Undershoot"]) for r in log]
+    osc_vals = [int(r["OscCount"]) for r in log]
+    ts_vals = [float(r["SettlingTime"]) * 1000.0 for r in log]
 
-    # Overshoot/Undershoot
-    ax1.plot(iterations, os_vals, 'r-o', label='Overshoot (%)', markersize=4)
-    ax1.plot(iterations, us_vals, 'orange', marker='s', label='Undershoot (%)', markersize=4)
-    ax1.axhline(y=TARGET_OS, color='r', linestyle='--', alpha=0.5, label=f'Target OS ({TARGET_OS}%)')
-    ax1.axhline(y=TARGET_US, color='orange', linestyle='--', alpha=0.5, label=f'Target US ({TARGET_US}%)')
-    ax1.fill_between(iterations, 0, os_vals, where=[os < TARGET_OS for os in os_vals],
-                     color='green', alpha=0.2, label='Pass region')
-    ax1.set_xlabel('Iteration')
-    ax1.set_ylabel('Percentage (%)')
-    ax1.set_title('Overshoot & Undershoot Evolution')
-    ax1.legend(loc='upper right')
+    ax1.plot(iterations, os_vals, "r-o", label="Overshoot (%)", markersize=4)
+    ax1.plot(iterations, us_vals, color="orange", marker="s", label="Undershoot (%)", markersize=4)
+    ax1.axhline(y=TARGET_OS, color="r", linestyle="--", alpha=0.5, label=f"Target OS ({TARGET_OS}%)")
+    ax1.axhline(y=TARGET_US, color="orange", linestyle="--", alpha=0.5, label=f"Target US ({TARGET_US}%)")
+    ax1.set_xlabel("Iteration")
+    ax1.set_ylabel("Percentage (%)")
+    ax1.set_title("Overshoot & Undershoot Evolution")
+    ax1.legend(loc="upper right")
     ax1.grid(True, alpha=0.3)
 
-    # Oscillations
-    ax2.bar(iterations, osc_vals, color=['green' if o <= 2 else 'red' for o in osc_vals])
-    ax2.axhline(y=2, color='gray', linestyle='--', label='Max oscillations (2)')
-    ax2.set_xlabel('Iteration')
-    ax2.set_ylabel('Oscillation Count')
-    ax2.set_title('Oscillation Count')
+    ax2.bar(iterations, osc_vals, color=["green" if o <= 0 else "red" for o in osc_vals])
+    ax2.axhline(y=0, color="gray", linestyle="--", label="Max oscillations (0)")
+    ax2.set_xlabel("Iteration")
+    ax2.set_ylabel("Oscillation Count")
+    ax2.set_title("Oscillation Count")
     ax2.legend()
     ax2.grid(True, alpha=0.3)
 
-    plt.tight_layout()
+    ax3.plot(iterations, ts_vals, color="#3366cc", marker="D", markersize=4)
+    ax3.axhline(y=0.1, color="gray", linestyle="--", label="Max Ts (0.1 ms)")
+    ax3.set_xlabel("Iteration")
+    ax3.set_ylabel("Settling Time (ms)")
+    ax3.set_title("Settling Time")
+    ax3.legend()
+    ax3.grid(True, alpha=0.3)
 
+    plt.tight_layout()
     if output_path:
         plt.savefig(output_path, dpi=150)
         print(f"Metrics plot saved: {output_path}")
@@ -428,7 +318,6 @@ def plot_metrics(output_path: str = None):
 
 
 def main():
-    """Generate all visualizations"""
     print("=" * 60)
     print("PLECS Buck Converter Tuning Analysis")
     print("=" * 60)
@@ -441,18 +330,17 @@ def main():
     print("\n[2] Generating parameter path plot...")
     plot_path(str(Path(RESULTS_DIR) / "path.png"))
 
-    print("\n[3] Generating final response plot...")
+    print("\n[3] Exporting final response frame...")
     plot_final(str(Path(RESULTS_DIR) / "final.png"))
 
-    print("\n[4] Generating animation (this may take a moment)...")
+    print("\n[4] Generating animation GIF...")
     plot_animation(str(Path(RESULTS_DIR) / "animation.gif"))
 
+    print("\n[5] Exporting best iteration frame...")
+    plot_best_iteration(str(Path(RESULTS_DIR) / "best_iteration.png"))
+
     print("\n" + "=" * 60)
-    print("Analysis complete! Check the results/ folder:")
-    print(f"  - {RESULTS_DIR}/metrics.png")
-    print(f"  - {RESULTS_DIR}/path.png")
-    print(f"  - {RESULTS_DIR}/final.png")
-    print(f"  - {RESULTS_DIR}/animation.gif")
+    print("Analysis complete! Check the results/ folder.")
     print("=" * 60)
 
 

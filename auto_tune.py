@@ -44,18 +44,20 @@ class TuningResult:
     status: str  # "PASS" or "FAIL"
 
 
-def result_priority(result: TuningResult) -> Tuple[float, float, int, float, int]:
+def result_priority(result: TuningResult) -> Tuple[float, float, float, int, float, int]:
     """
-    Rank iterations by how small and balanced OS/US are.
+    Rank iterations by OS^2 + US^2, favoring small and balanced deviation.
 
     Priority order:
-    1. Smaller worst-case deviation between OS and US
-    2. Smaller combined OS + US
-    3. Fewer oscillations
-    4. Faster settling
-    5. Earlier iteration number
+    1. Smaller OS^2 + US^2
+    2. Smaller worst-case deviation
+    3. Smaller combined OS + US
+    4. Fewer oscillations
+    5. Faster settling
+    6. Earlier iteration number
     """
     return (
+        result.overshoot ** 2 + result.undershoot ** 2,
         max(result.overshoot, result.undershoot),
         result.overshoot + result.undershoot,
         result.osc_count,
@@ -215,21 +217,22 @@ class TuningConfig:
     All Kp/Ki/Kd/Kf bounds are derived by sweeping wc and phi_m
     through the compensator design equations.
     """
-    plecs_exe: str = r"C:\Users\liaom\Documents\Plexim\PLECS 4.9 (64 bit)\PLECS.exe"
+    plecs_exe: str = r"C:\Users\liaom\Documents\Plexim\PLECS 5.0 (64 bit)\PLECS.exe"
     plecs_model: str = str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve())
     rpc_url: str = 'http://127.0.0.1:1080/RPC2'
     model_id: str = "synchronous buck"
     results_dir: str = str((Path(__file__).resolve().parent / "results").resolve())
-    sim_time_span: str = "1.2e-3"
-    load_pulse_frequency: str = "1000"
-    load_pulse_duty_cycle: str = "0.5"
-    load_pulse_delay: str = "4e-4"
+    sim_time_span: str = "3e-3"
+    load_pulse_frequency: str = "250"
+    load_pulse_duty_cycle: str = "0.25"
+    load_pulse_delay: str = "1e-3"
     cout_v_init: str = "Vout"
     inductor_i_init: str = "Vout/5"
-    target_overshoot: float = 5.0
-    target_undershoot: float = 5.0
-    max_oscillations: int = 2
-    max_iterations: int = 101
+    target_overshoot: float = 4.0
+    target_undershoot: float = 4.0
+    max_oscillations: int = 0
+    target_settling_time: float = 1e-4
+    max_iterations: int = 50
     # --- Design variable ranges ---
     # wc: crossover frequency (rad/s)
     #   min: LC resonance w0 ~ 47,140 rad/s (7.5 kHz)
@@ -246,12 +249,13 @@ class TuningConfig:
     phi_m_max: float = 1.3963    # 80 deg
     phi_m_initial: float = 0.5236  # Start at 30 deg — intentionally low phase margin
 
-    def meets_targets(self, overshoot: float, undershoot: float, osc_count: int) -> bool:
+    def meets_targets(self, overshoot: float, undershoot: float, osc_count: int, settling_time: float) -> bool:
         """Return True when the measured metrics satisfy the user targets."""
         return (
             overshoot < self.target_overshoot and
             undershoot < self.target_undershoot and
-            osc_count <= self.max_oscillations
+            osc_count <= self.max_oscillations and
+            settling_time <= self.target_settling_time
         )
 
 
@@ -458,12 +462,12 @@ class ResponseAnalyzer:
 
     def __init__(self, v_target: float = 5.0,
                  transient_window: float = 0.00035,
-                 ripple_filter_cycles: int = 4,
+                 ripple_filter_samples: int = 12,
                  fsw: float = 250e3,
                  expected_step_times: Optional[List[float]] = None):
         self.v_target = v_target          # Target output voltage (V)
         self.transient_window = transient_window  # How long after step to analyse (s)
-        self.ripple_filter_cycles = ripple_filter_cycles
+        self.ripple_filter_samples = ripple_filter_samples
         self.fsw = fsw                    # Switching frequency (Hz)
         self.expected_step_times = expected_step_times or []
 
@@ -594,9 +598,44 @@ class ResponseAnalyzer:
 
         return max(len(sig_peaks), len(sig_valleys))
 
+    def _compute_settling_band(self, vout_filt: List[float], settle_ref_start: int, end_idx: int) -> float:
+        """
+        Compute a settling band around Vtarget from filtered ripple near the end
+        of the analysis window. This keeps switching ripple from dominating Ts.
+        """
+        if end_idx <= settle_ref_start + 5:
+            return 0.01
+
+        tail = vout_filt[settle_ref_start:end_idx]
+        if not tail:
+            return 0.01
+
+        tail_max = max(tail)
+        tail_min = min(tail)
+        ripple_half = max(0.0, (tail_max - tail_min) * 0.5)
+
+        # At least 10 mV, otherwise use a modest ripple-aware band.
+        return max(0.01, ripple_half * 1.5)
+
+    def _compute_ripple_limit(self, vout_raw: List[float], settle_ref_start: int, end_idx: int, v_band: float) -> float:
+        """
+        Compute an allowable raw ripple peak-to-peak limit for settling detection.
+        This prevents positive/negative ringing from averaging to 5 V too early.
+        """
+        if end_idx <= settle_ref_start + 5:
+            return max(0.02, 2.0 * v_band)
+
+        tail = vout_raw[settle_ref_start:end_idx]
+        if not tail:
+            return max(0.02, 2.0 * v_band)
+
+        tail_pkpk = max(tail) - min(tail)
+        return max(0.02, max(2.0 * v_band, tail_pkpk * 1.5))
+
     def _analyze_single_step(self, time_vals: List[float], vout_raw: List[float],
                              vout_filt: List[float], step_t: float,
-                             window_end_t: float, ripple_window: int) -> Tuple[float, float, int, float]:
+                             window_end_t: float, ripple_window: int,
+                             avg_dt: float) -> Tuple[float, float, int, float]:
         """Analyze one transient window and return OS/US/osc/settling metrics."""
         n = len(time_vals)
         step_idx = self._find_idx(time_vals, step_t)
@@ -611,14 +650,33 @@ class ResponseAnalyzer:
         undershoot = max(0.0, (self.v_target - v_valley) / self.v_target * 100)
         osc_count = self._count_oscillations(vout_filt, time_vals, step_idx, end_idx)
 
-        v_band = self.v_target * 0.02
         settling_time = max(0.0, window_end_t - step_t)
         check_block = max(10, ripple_window)
-        for i in range(step_idx, max(step_idx + 1, end_idx - check_block)):
-            block = vout_filt[i:i + check_block]
-            if max(block) < self.v_target + v_band and min(block) > self.v_target - v_band:
+        settle_ref_start = max(step_idx, end_idx - max(check_block * 2, 20))
+        v_band = self._compute_settling_band(vout_filt, settle_ref_start, end_idx)
+        ripple_limit = self._compute_ripple_limit(vout_raw, settle_ref_start, end_idx, v_band)
+        settle_start_idx = min(end_idx - 1, step_idx + max(check_block, int(5e-6 / max(avg_dt, 1e-12))))
+        for i in range(settle_start_idx, max(settle_start_idx + 1, end_idx - check_block)):
+            filt_tail = vout_filt[i:end_idx]
+            raw_tail = vout_raw[i:end_idx]
+            filt_in_band = (
+                max(filt_tail) <= self.v_target + v_band and
+                min(filt_tail) >= self.v_target - v_band
+            )
+            raw_ripple_ok = (max(raw_tail) - min(raw_tail)) <= ripple_limit
+            if filt_in_band and raw_ripple_ok:
                 settling_time = time_vals[i] - step_t
                 break
+
+        filter_span = max(avg_dt, ripple_window * avg_dt)
+        filter_eq_hz = 1.0 / max(1e-12, 2.0 * math.pi * filter_span)
+        print(
+            f"    [Settling] step={step_t*1000:.3f} ms | "
+            f"band=+/-{v_band*1000:.2f} mV | "
+            f"ripple_limit={ripple_limit*1000:.2f} mVpp | "
+            f"hold=tail_to_window_end | "
+            f"filter={ripple_window} samples ({filter_span*1e6:.2f} us, ~{filter_eq_hz:.0f} Hz)"
+        )
 
         return overshoot, undershoot, osc_count, settling_time
 
@@ -643,11 +701,9 @@ class ResponseAnalyzer:
         vout_raw  = [row[vout_col] for row in data]
         il_vals   = [row[il_col]   for row in data]
 
-        # Estimate samples per switching cycle for ripple filter
         total_time = time_vals[-1] - time_vals[0]
         avg_dt = total_time / (n - 1) if n > 1 else 1e-6
-        samples_per_cycle = max(1, int(1.0 / (self.fsw * avg_dt)))
-        ripple_window = samples_per_cycle * self.ripple_filter_cycles
+        ripple_window = max(1, self.ripple_filter_samples)
         vout_filt = self._moving_average(vout_raw, ripple_window)
 
         # Auto-detect load step times
@@ -716,8 +772,7 @@ class ResponseAnalyzer:
 
         total_time = time_vals[-1] - time_vals[0]
         avg_dt = total_time / (n - 1) if n > 1 else 1e-6
-        samples_per_cycle = max(1, int(1.0 / (self.fsw * avg_dt)))
-        ripple_window = samples_per_cycle * self.ripple_filter_cycles
+        ripple_window = max(1, self.ripple_filter_samples)
         vout_filt = self._moving_average(vout_raw, ripple_window)
 
         if self.expected_step_times:
@@ -741,7 +796,7 @@ class ResponseAnalyzer:
             if window_end_t <= step_t:
                 window_end_t = min(step_t + self.transient_window, time_vals[-1])
             metrics = self._analyze_single_step(
-                time_vals, vout_raw, vout_filt, step_t, window_end_t, ripple_window
+                time_vals, vout_raw, vout_filt, step_t, window_end_t, ripple_window, avg_dt
             )
             step_results.append((step_t, *metrics))
 
@@ -929,6 +984,12 @@ class GridRefinePidTuner:
         self.best_pass_phi_m: Optional[float] = None
         self.coarse_candidates = self._build_coarse_candidates()
         self.local_candidates: List[Tuple[float, float]] = []
+        self.post_pass_candidates: List[Tuple[float, float]] = []
+        self.post_pass_scan_budget = 20
+        self.post_pass_scan_count = 0
+        self.pass_history: List[Tuple[float, float, float, float, int]] = []
+        self.post_pass_fine_level = 0
+        self.visited_designs = set()
 
     @staticmethod
     def _linspace(start: float, stop: float, count: int) -> List[float]:
@@ -942,10 +1003,29 @@ class GridRefinePidTuner:
         phi_m = max(self.config.phi_m_min, min(phi_m, self.config.phi_m_max))
         return wc, phi_m
 
-    def _score(self, overshoot: float, undershoot: float, osc_count: int) -> float:
+    @staticmethod
+    def _design_key(wc: float, phi_m: float) -> Tuple[int, int]:
+        return (round(wc), round(math.degrees(phi_m) * 1000))
+
+    def _filter_unseen(self, candidates: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+        unseen = [c for c in candidates if self._design_key(c[0], c[1]) not in self.visited_designs]
+        return unseen if unseen else candidates
+
+    def _score(self, overshoot: float, undershoot: float, osc_count: int, settling_time: float) -> float:
         return (max(0.0, overshoot - self.config.target_overshoot) +
                 max(0.0, undershoot - self.config.target_undershoot) +
-                max(0, osc_count - self.config.max_oscillations) * 3.0)
+                max(0, osc_count - self.config.max_oscillations) * 3.0 +
+                max(0.0, settling_time - self.config.target_settling_time) * 10000.0)
+
+    @staticmethod
+    def _pass_objective(overshoot: float, undershoot: float, osc_count: int) -> Tuple[float, float, float, int]:
+        """Rank passing solutions by OS^2+US^2, then smaller worst-case and total deviation."""
+        return (
+            overshoot ** 2 + undershoot ** 2,
+            max(overshoot, undershoot),
+            overshoot + undershoot,
+            osc_count,
+        )
 
     def _build_coarse_candidates(self) -> List[Tuple[float, float]]:
         wc_vals = self._linspace(self.config.wc_min, self.config.wc_max, 5)
@@ -973,24 +1053,60 @@ class GridRefinePidTuner:
                 if candidate not in candidates:
                     candidates.append(candidate)
         candidates.append(center)
-        return candidates
+        return self._filter_unseen(candidates)
 
-    def _record_result(self, overshoot: float, undershoot: float, osc_count: int) -> None:
-        score = self._score(overshoot, undershoot, osc_count)
-        passed = (overshoot < self.config.target_overshoot and
-                  undershoot < self.config.target_undershoot and
-                  osc_count <= self.config.max_oscillations)
+    def _build_post_pass_candidates(self, center_wc: float, center_phi_m: float) -> List[Tuple[float, float]]:
+        """Smaller local moves used after the targets are already satisfied."""
+        wc_scales = [-0.05, -0.025, 0.0, 0.025, 0.05]
+        phi_offsets = [math.radians(v) for v in (-3.0, -1.5, 0.0, 1.5, 3.0)]
+        center = self._clamp_design(center_wc, center_phi_m)
+        candidates: List[Tuple[float, float]] = []
+        for wc_scale in wc_scales:
+            for phi_delta in phi_offsets:
+                candidate = self._clamp_design(center_wc * (1.0 + wc_scale), center_phi_m + phi_delta)
+                if candidate == center:
+                    continue
+                if candidate not in candidates:
+                    candidates.append(candidate)
+        candidates.append(center)
+        return self._filter_unseen(candidates)
+
+    def _build_post_pass_fine_candidates(self, center_wc: float, center_phi_m: float) -> List[Tuple[float, float]]:
+        """Very small local moves around the best passing point."""
+        shrink = 0.5 ** self.post_pass_fine_level
+        wc_scales = [v * shrink for v in (-0.02, -0.01, 0.0, 0.01, 0.02)]
+        phi_offsets = [math.radians(v * shrink) for v in (-1.0, -0.5, 0.0, 0.5, 1.0)]
+        center = self._clamp_design(center_wc, center_phi_m)
+        candidates: List[Tuple[float, float]] = []
+        for wc_scale in wc_scales:
+            for phi_delta in phi_offsets:
+                candidate = self._clamp_design(center_wc * (1.0 + wc_scale), center_phi_m + phi_delta)
+                if candidate == center:
+                    continue
+                if candidate not in candidates:
+                    candidates.append(candidate)
+        candidates.append(center)
+        return self._filter_unseen(candidates)
+
+    def _record_result(self, overshoot: float, undershoot: float, osc_count: int, settling_time: float) -> None:
+        score = self._score(overshoot, undershoot, osc_count, settling_time)
+        passed = self.config.meets_targets(overshoot, undershoot, osc_count, settling_time)
         if score < self.best_score:
             self.best_score = score
             self.best_wc = self.wc
             self.best_phi_m = self.phi_m
-        if passed and score < self.best_pass_score:
-            self.best_pass_score = score
-            self.best_pass_wc = self.wc
-            self.best_pass_phi_m = self.phi_m
+        if passed:
+            pass_obj = self._pass_objective(overshoot, undershoot, osc_count)
+            self.pass_history.append((self.wc, self.phi_m, overshoot, undershoot, osc_count))
+            best_pass_obj = self.best_pass_score if self.best_pass_wc is not None and self.best_pass_phi_m is not None else None
+            if best_pass_obj is None or pass_obj < best_pass_obj:
+                self.best_pass_score = pass_obj
+                self.best_pass_wc = self.wc
+                self.best_pass_phi_m = self.phi_m
 
     def _set_design(self, wc: float, phi_m: float) -> Tuple[float, float, float, float]:
         self.wc, self.phi_m = self._clamp_design(wc, phi_m)
+        self.visited_designs.add(self._design_key(self.wc, self.phi_m))
         Kp, Ki, Kd, Kf = self.compensator.compute(self.wc, self.phi_m)
         print(f"    -> Next design ({self.phase}): wc={self.wc:.0f} rad/s ({self.wc/(2*math.pi):.0f} Hz), "
               f"phi_m={math.degrees(self.phi_m):.1f} deg")
@@ -1002,9 +1118,9 @@ class GridRefinePidTuner:
         return self.compensator.compute(self.wc, self.phi_m)
 
     def adjust(self, Kp: float, Ki: float, Kd: float, Kf: float,
-               overshoot: float, undershoot: float, osc_count: int) -> Tuple[float, float, float, float]:
+               overshoot: float, undershoot: float, osc_count: int, settling_time: float) -> Tuple[float, float, float, float]:
         self.iteration += 1
-        self._record_result(overshoot, undershoot, osc_count)
+        self._record_result(overshoot, undershoot, osc_count, settling_time)
 
         if self.phase == "bootstrap":
             self.phase = "coarse_grid"
@@ -1025,6 +1141,39 @@ class GridRefinePidTuner:
             wc, phi_m = self.local_candidates.pop(0)
             return self._set_design(wc, phi_m)
 
+        if self.best_pass_wc is not None and self.best_pass_phi_m is not None:
+            seed_wc = self.best_pass_wc
+            seed_phi = self.best_pass_phi_m
+            if self.phase not in ("post_pass_scan", "post_pass_fine"):
+                self.post_pass_candidates = self._build_post_pass_candidates(seed_wc, seed_phi)
+                self.post_pass_scan_count = 0
+                self.post_pass_fine_level = 0
+                self.phase = "post_pass_scan"
+                print("    -> Target met, starting 20 extra scans around passing region before fine refinement")
+            if self.phase == "post_pass_scan":
+                if self.post_pass_scan_count < self.post_pass_scan_budget and self.post_pass_candidates:
+                    self.post_pass_scan_count += 1
+                    wc, phi_m = self.post_pass_candidates.pop(0)
+                    return self._set_design(wc, phi_m)
+                if self.pass_history:
+                    best_pass = min(
+                        self.pass_history,
+                        key=lambda item: self._pass_objective(item[2], item[3], item[4])
+                    )
+                    self.best_pass_wc = best_pass[0]
+                    self.best_pass_phi_m = best_pass[1]
+                seed_wc = self.best_pass_wc if self.best_pass_wc is not None else seed_wc
+                seed_phi = self.best_pass_phi_m if self.best_pass_phi_m is not None else seed_phi
+                self.post_pass_candidates = self._build_post_pass_fine_candidates(seed_wc, seed_phi)
+                self.phase = "post_pass_fine"
+                print("    -> Extra scan complete, switching to finer search around min(OS^2 + US^2)")
+            elif not self.post_pass_candidates:
+                self.post_pass_fine_level += 1
+                self.post_pass_candidates = self._build_post_pass_fine_candidates(seed_wc, seed_phi)
+                print(f"    -> Fine pass refinement ring exhausted, shrinking step size to level {self.post_pass_fine_level}")
+            wc, phi_m = self.post_pass_candidates.pop(0)
+            return self._set_design(wc, phi_m)
+
         if self.local_candidates:
             wc, phi_m = self.local_candidates.pop(0)
             return self._set_design(wc, phi_m)
@@ -1036,10 +1185,8 @@ class GridRefinePidTuner:
         wc, phi_m = self.local_candidates.pop(0)
         return self._set_design(wc, phi_m)
 
-    def check_pass(self, overshoot: float, undershoot: float, osc_count: int) -> bool:
-        metrics_pass = (overshoot < self.config.target_overshoot and
-                        undershoot < self.config.target_undershoot and
-                        osc_count <= self.config.max_oscillations)
+    def check_pass(self, overshoot: float, undershoot: float, osc_count: int, settling_time: float) -> bool:
+        metrics_pass = self.config.meets_targets(overshoot, undershoot, osc_count, settling_time)
         return metrics_pass and self.phase == "local_refine"
 
 
@@ -1064,6 +1211,8 @@ class AutoTuner:
         self.tuner = GridRefinePidTuner(self.config)
         self.csv_parser = ScopeCsvParser()
         self.results: List[TuningResult] = []
+        self.last_header: List[str] = []
+        self.last_data: List[List[float]] = []
 
     def _apply_fast_transient_settings(self) -> None:
         """Configure the loaded model for short step-up/step-down tests."""
@@ -1094,8 +1243,8 @@ class AutoTuner:
             print(f"  Opening source model...")
             self.plecs.load_model(str(target_model_path))
         else:
-            self.plecs.model_id = self.config.model_id
-            self.plecs.loaded_model_path = loaded_path
+            print(f"  Reloading source model to pick up latest analysis/settings...")
+            self.plecs.load_model(str(target_model_path), force_reload=True)
         self._apply_fast_transient_settings()
 
     def run_iteration(self, iter_num: int, Kp: float, Ki: float,
@@ -1125,19 +1274,17 @@ class AutoTuner:
         try:
             sim_result = self.plecs.simulate()
             header, data = self.csv_parser.from_simulation_result(sim_result)
-            csv_data = self.csv_parser.to_csv_bytes(header, data)
         except Exception as e:
             print(f"  Simulation/export error: {e}")
             return TuningResult(iter_num, Kp, Ki, Kd, Kf, 10, 10, 5, 0.005, "FAIL")
 
-        # Save CSV for this iteration
-        csv_path = Path(self.config.results_dir) / f"iter_{iter_num:03d}.csv"
-        csv_path.write_bytes(csv_data)
+        self.last_header = header
+        self.last_data = data
 
         # Analyze direct simulation outputs
         overshoot, undershoot, osc_count, settling_time = self.analyzer.analyze(header, data)
 
-        status = "PASS" if self.config.meets_targets(overshoot, undershoot, osc_count) else "FAIL"
+        status = "PASS" if self.config.meets_targets(overshoot, undershoot, osc_count, settling_time) else "FAIL"
 
         result = TuningResult(
             iter_num=iter_num,
@@ -1198,7 +1345,8 @@ class AutoTuner:
         print(f"    Initial: Kp={Kp:.5f}, Ki={Ki:.2f}, Kd={Kd:.2e}, Kf={Kf:.0f}")
         print(f"    Targets: OS<{self.config.target_overshoot}%, "
               f"US<{self.config.target_undershoot}%, "
-              f"Osc<={self.config.max_oscillations}")
+              f"Osc<={self.config.max_oscillations}, "
+              f"Ts<={self.config.target_settling_time*1000:.3f} ms")
 
         # Print reference design for comparison
         comp = CompensatorDesign()
@@ -1216,7 +1364,7 @@ class AutoTuner:
             if i < self.config.max_iterations - 1:
                 Kp, Ki, Kd, Kf = self.tuner.adjust(
                     Kp, Ki, Kd, Kf,
-                    result.overshoot, result.undershoot, result.osc_count
+                    result.overshoot, result.undershoot, result.osc_count, result.settling_time
                 )
 
         print(f"\nMax iterations ({self.config.max_iterations}) reached")
