@@ -26,13 +26,13 @@ Plecs {
   StiffnessDetectionMsg "2"
   MaxConsecutiveZCs "1000"
   AlgebraicLoopWithStateMachineMsg "2"
-  AssertionAction "1"
+  AssertionAction "2"
   FixedPointDatatypeOverride "1"
   InitializationCommands "% ================================\n% Plant paramete"
 "rs\n% ================================\nVdc  = 12;\nVout = 5;\nCout = 15e-6;"
 "\nRc   = 7.5e-3;\nL    = 30e-6;\nRl   = 50e-3;\n\nfsw = 250e3;          % Swi"
-"tching frequency (Hz)\ntd  = 20e-9;          % Dead-time (s)\n\nKp = 0.166507;"
-"\nKi = 1419.38;\nKd = 1.586e-06;\nKf = 156357;\n\n\n\n"
+"tching frequency (Hz)\ntd  = 20e-9;          % Dead-time (s)\n\nKp = 0.051311"
+";\nKi = 250.8;\nKd = 2.593e-06;\nKf = 884901.0;\n\n\n\n"
   InitialState  "1"
   SystemState   ""
   JacobianComputation "2"
@@ -78,8 +78,8 @@ Plecs {
     Index         "2"
   }
   Schematic {
-    Location      [310, 217; 2230, 1183]
-    ZoomFactor    2.2459
+    Location      [0, 24; 2560, 1350]
+    ZoomFactor    3.36578
     SliderPosition [0, 0]
     ShowBrowser   off
     BrowserWidth  100
@@ -162,11 +162,11 @@ Plecs {
       Flipped       off
       LabelPosition south
       Frame         [-15, -15; 15, 15]
-      Location      [-1920, 23; 0, 1011]
+      Location      [0, 24; 1920, 1021]
       State         "AAAA/wAAAAD9AAAAAgAAAAEAAAB4AAABe/wCAAAAA/sAAAAQAFoAbwBvA"
 "G0AQQByAGUAYQAAAAAA/////wAAAFgA////+wAAABQAUwBhAHYAZQBkAFYAaQBlAHcAcwAAAAAA//"
 "///wAAAGIA////+wAAAAwAVAByAGEAYwBlAHMAAAAAHAAAAXsAAABiAP///wAAAAMAAAMuAAAAdvw"
-"BAAAAAfsAAAAUAEQAYQB0AGEAVwBpAGQAZwBlAHQAAAAAAAAAAy4AAABEAP///wAAB4AAAAO9AAAA"
+"BAAAAAfsAAAAUAEQAYQB0AGEAVwBpAGQAZwBlAHQAAAAAAAAAAy4AAABEAP///wAAB4AAAAPGAAAA"
 "BAAAAAQAAAAIAAAACPwAAAABAAAAAgAAAAEAAAAOAFQAbwBvAGwAQgBhAHIBAAAAAP////8AAAAAA"
 "AAAAA=="
       SavedViews    "AAAAAgAAAAA="
@@ -178,7 +178,7 @@ Plecs {
       TimeRange     "0"
       ScrollingMode "1"
       SingleTimeAxis "1"
-      Open          "1"
+      Open          "0"
       Ts            "-1"
       SampleLimit   "0"
       XAxisLabel    "Time / s"
@@ -355,7 +355,6 @@ Plecs {
       Direction     right
       Flipped       on
       LabelPosition south
-      CommentOut    DisabledOpenCircuit
       Parameter {
         Variable      "Hi"
         Value         "1"
@@ -1401,13 +1400,13 @@ Plecs {
     ShowLegend    "1"
     StartTime     ""
     InitSimulationTime "2e-3"
-    SettlingTime  "3e-3"
-    ExtractionCycles "100"
+    SettlingTime  "2e-3"
+    ExtractionCycles "30"
     FrequencyRange "[1000 100000]"
     FrequencyScale "2"
     AdditionalFreqs "[]"
-    AmplitudeRange "5e-3"
-    NumPoints     "31"
+    AmplitudeRange "1e-3"
+    NumPoints     "51"
     MaxNumberOfThreads "-1"
     Perturbation  "Loop Gain Meter/Perturbation"
     Response      "Loop Gain Meter/Response"
@@ -1431,34 +1430,35 @@ Plecs {
   }
   Script {
     Name          "Script"
-    Script        "% GUI_METADATA_BEGIN
-% wc_rad_per_s = 94248
-% phi_m_deg = 30
-% target_os_pct = 4
-% target_us_pct = 4
-% max_osc = 0
-% max_ts_ms = 0.1
-% max_iter = 50
-% run_bode_analysis = 1
-% bode_start_hz = 1000
-% bode_stop_hz = 100000
-% bode_points = 31
-% GUI_METADATA_END"
+    Script        "% GUI_METADATA_BEGIN\r\n% wc_rad_per_s = 94248\r\n% phi_m_d"
 "eg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% m"
-"ax_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_"
-"hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_"
-"ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n"
-"% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_sta"
-"rt_hz = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADAT"
-"A_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r"
+"ax_ts_ms = 0.1\r\n% max_iter = 40\r\n% run_bode_analysis = 1\r\n% bode_start_"
+"hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_extraction_cycles = 30\r\n% bo"
+"de_coarse_points = 51\r\n% bode_dense_points = 51\r\n% GUI_METADATA_ENDeg = 3"
+"0\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_"
+"ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1"
+"000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg "
+"= 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_"
+"ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz "
+"= 1000\r\n% bode_stop_hz = 10000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDe"
+"g = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% ma"
+"x_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_h"
+"z = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_EN"
+"Deg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% "
+"max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start"
+"_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA"
+"_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r"
 "\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_s"
-"tart_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_META"
-"DATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = "
-"0\r\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bod"
-"e_start_hz = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_ME"
+"tart_hz = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METAD"
+"ATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0"
+"\r\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode"
+"_start_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_ME"
 "TADATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc "
-"= 0\r\n% max_ts_ms = 0.15\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% "
-"bode_start_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GU"
-"I_METADATA_END"
+"= 0\r\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% b"
+"ode_start_hz = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_"
+"METADATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_os"
+"c = 0\r\n% max_ts_ms = 0.15\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n"
+"% bode_start_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% "
+"GUI_METADATA_END"
   }
 }

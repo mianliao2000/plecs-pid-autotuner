@@ -1,6 +1,6 @@
 # PLECS Buck Converter PID Auto-Tuner
 
-Automated PID tuning system for a synchronous buck converter simulated in PLECS. Uses analytical Type 3 compensator design to find optimal PID parameters by adjusting two design variables — crossover frequency (`wc`) and phase margin (`phi_m`) — instead of searching through all four PID gains independently.
+Automated PID tuning system for a synchronous buck converter simulated in PLECS. Uses analytical Type 3 compensator design to find optimal PID parameters by searching over two design variables — crossover frequency (`wc`) and phase margin (`phi_m`) — instead of searching through all four PID gains independently. After each time-domain simulation, a loop-gain Bode analysis is optionally run to measure the actual crossover frequency, phase margin, and gain margin.
 
 ---
 
@@ -10,9 +10,9 @@ Automated PID tuning system for a synchronous buck converter simulated in PLECS.
 2. [File Structure](#file-structure)
 3. [Circuit Parameters](#circuit-parameters)
 4. [Theory: Type 3 Compensator Design](#theory-type-3-compensator-design)
-5. [Algorithm Flowcharts](#algorithm-flowcharts)
-6. [Response Analysis](#response-analysis)
-7. [Tuning Strategy](#tuning-strategy)
+5. [Algorithm: Grid-Refine Search](#algorithm-grid-refine-search)
+6. [Algorithm Flowcharts](#algorithm-flowcharts)
+7. [Response Analysis](#response-analysis)
 8. [GUI](#gui)
 9. [Installation & Usage](#installation--usage)
 10. [Configuration](#configuration)
@@ -22,43 +22,44 @@ Automated PID tuning system for a synchronous buck converter simulated in PLECS.
 
 ## System Overview
 
-The tuner connects to PLECS via XML-RPC, modifies the controller parameters in the `.plecs` model file, runs a time-domain simulation, reads the output voltage waveform, and iteratively adjusts the controller until the load-step transient response meets the performance targets.
+The tuner connects to PLECS via XML-RPC, updates the controller gains in the loaded model, runs a time-domain simulation, reads the output voltage waveform directly from the simulation result, and iteratively adjusts the controller until the load-step transient response meets all performance targets.
 
 **Performance targets (defaults):**
 
 | Metric | Target |
 |---|---|
-| Overshoot | < 5% |
-| Undershoot | < 5% |
-| Oscillations after step | <= 2 |
+| Overshoot | < 4% |
+| Undershoot | < 4% |
+| Oscillations after step | 0 |
+| Settling time | ≤ 0.1 ms |
 
 ---
 
 ## File Structure
 
 ```
-Plecs/
-├── auto_tune.py            # Core tuning engine (all classes)
-├── analyze.py              # Post-processing: animation, plots
-├── gui.py                  # PyQt5 real-time GUI
-├── synchronous buck.plecs  # PLECS model (modified each iteration)
-├── auto_tune.pls           # PLECS simulation script (Octave/MATLAB)
-├── demo.py                 # Quick demo / smoke test
-├── results/
-│   ├── iter_000.csv        # Scope data for iteration 0
-│   ├── iter_001.csv        # ...
-│   ├── tuning_log.csv      # Summary: all iterations & metrics
-│   ├── animation.gif       # Animated waveform evolution
-│   ├── metrics.png         # OS/US/oscillation progression
-│   └── path.png            # wc/phi_m search path
-└── plecs-rpc-scope-export/ # Utility scripts for PLECS RPC
+plecs-pid-autotuner/
+├── auto_tune.py              # Core tuning engine: all classes and orchestration
+├── gui.py                    # PyQt5 real-time GUI
+├── bode_plot.py              # Loop-gain frequency response analysis
+├── iteration_export.py       # Per-iteration PNG frames and Excel workbooks
+├── analyze.py                # Post-processing: animation GIF, trend plots
+├── synchronous buck.plecs    # PLECS model (parameters updated each iteration)
+├── synchronous buck.png      # Circuit screenshot shown in GUI
+└── results/
+    ├── figures_MMDD_HHMM/    # Timestamped run folder
+    │   ├── iter1.png         # Waveform + Bode frame for iteration 1
+    │   ├── iter2.png         # ...
+    │   ├── best_iteration.png
+    │   ├── animation.gif
+    │   ├── data_time_iterations.xlsx   # Summary + per-iteration waveform data
+    │   └── data_bode_iterations.xlsx  # Bode metrics + per-iteration frequency data
+    └── ...                   # Up to 5 recent run folders are kept
 ```
 
 ---
 
 ## Circuit Parameters
-
-The buck converter being tuned:
 
 | Parameter | Symbol | Value |
 |---|---|---|
@@ -76,10 +77,10 @@ The buck converter being tuned:
 |---|---|---|
 | LC resonant frequency | f0 = 1/(2π√LC) | 7.5 kHz |
 | Quality factor | Q = √(L/C) / (Rc + Rl) | 24.6 (lightly damped) |
-| ESR zero | fesr = 1/(2π·Rc·C) | 1.41 MHz |
+| ESR zero | fesr = 1/(2πRcC) | 1.41 MHz |
 | DC gain | Gvd0 = Vdc | 12 |
 
-The high Q factor (24.6) means the converter is very lightly damped near resonance — the compensator must provide enough phase margin to stabilize it.
+The high Q factor (24.6) means the converter is very lightly damped near resonance — the compensator must provide enough phase margin to stabilise it.
 
 ---
 
@@ -95,9 +96,8 @@ Gvd(s) = ───────────────────────�
           1 + s/(Q·ω0) + (s/ω0)²
 ```
 
-This is a second-order system with:
-- A double pole at ω0 (–40 dB/dec rolloff, –180° phase shift)
-- A zero from capacitor ESR at ωesr (recovers +20 dB/dec)
+- Double pole at ω0 (–40 dB/dec rolloff, –180° phase shift)
+- ESR zero at ωesr (recovers +20 dB/dec)
 
 ### Compensator Topology (PLECS Parallel PID)
 
@@ -107,18 +107,16 @@ C(s) = Kp + Ki/s + Kd·Kf·s/(s + Kf)
 
 - `Ki/s` — integrator: forces zero steady-state error
 - `Kp` — proportional gain
-- `Kd·Kf·s/(s+Kf)` — filtered derivative: adds phase boost, with `Kf` limiting high-frequency gain
+- `Kd·Kf·s/(s+Kf)` — filtered derivative: adds phase boost, `Kf` limits high-frequency gain
 
-This structure is equivalent to a Type 3 compensator with two zeros and two poles (plus the integrator pole at origin).
+This is equivalent to a Type 3 compensator with two zeros and two poles (plus the integrator pole at origin).
 
 ### Two Design Variables → Four PID Parameters
 
-Rather than searching a 4-dimensional space, all four gains are computed analytically from just two design variables:
-
 | Variable | Symbol | Meaning | Range |
 |---|---|---|---|
-| Crossover frequency | wc | Where open-loop gain = 0 dB | [15 kHz, 50 kHz] (rad/s: 94,248 – 314,159) |
-| Phase margin | phi_m | Stability margin at crossover | [30°, 80°] |
+| Crossover frequency | wc | Where open-loop gain = 0 dB | 15 kHz – 50 kHz (rad/s: 94,248 – 314,159) |
+| Phase margin | phi_m | Stability margin at crossover | 30° – 80° |
 
 ### Analytical Design Equations
 
@@ -126,7 +124,6 @@ Rather than searching a 4-dimensional space, all four gains are computed analyti
 ```
 ωl = wc / 10
 ```
-Place the integrator decade below crossover to avoid phase penalty at crossover.
 
 **Step 2 — Evaluate plant at crossover:**
 ```
@@ -137,14 +134,12 @@ Gvd(j·wc) → gain_plant = |Gvd(j·wc)|,  phi_plant = ∠Gvd(j·wc)
 ```
 phi_boost = (–π + phi_m) – phi_plant
 ```
-The compensator must supply enough phase to achieve the desired phase margin.
 
 **Step 4 — Lead-lag zero and pole:**
 ```
 wz = wc · √((1 – sin(phi_boost)) / (1 + sin(phi_boost)))
 wp = wc · √((1 + sin(phi_boost)) / (1 – sin(phi_boost)))
 ```
-These place the compensator zero (wz) and pole (wp) symmetrically around wc to maximise phase at crossover.
 
 **Step 5 — Controller gain for unity crossover:**
 ```
@@ -167,6 +162,41 @@ Kd = max(0, Gpid0/wz – Kp/Kf)   ← clamped: negative Kd is unstable
 
 ---
 
+## Algorithm: Grid-Refine Search
+
+The tuner (`GridRefinePidTuner`) replaces a simple heuristic hill-climber with a structured multi-phase search over the 2D (wc, phi_m) space. All four PID gains are recomputed analytically at every candidate point.
+
+### Search Phases
+
+| Phase | Description |
+|---|---|
+| **Bootstrap** | Evaluate the initial (wc, phi_m) point |
+| **Coarse grid** | Sweep a 5×4 grid across the full wc/phi_m range (20 evaluations); wc points are logarithmically spaced, phi_m points are linearly spaced |
+| **Local refine** | 5×5 grid (±12% wc, ±8° phi_m) centred on the best coarse point |
+| **Post-pass scan** | After the first passing result, scan 20 more points around the passing region |
+| **Post-pass fine** | Progressively shrinking rings around the best passing point to minimise OS²+US² |
+
+### Score Function
+
+```
+score = excess_OS + excess_US + excess_osc × 3 + excess_Ts × 10000
+```
+
+Oscillations are weighted 3× because they indicate fundamental stability problems. Settling time is weighted heavily to ensure it is genuinely met, not just close.
+
+### Best Result Selection
+
+Among all passing iterations, the best is chosen by:
+
+1. Smallest OS² + US² (balanced, low deviation)
+2. Smallest worst-case deviation (min of max(OS, US))
+3. Smallest OS + US
+4. Fewest oscillations
+5. Fastest settling time
+6. Earliest iteration number (tie-break)
+
+---
+
 ## Algorithm Flowcharts
 
 ### Top-Level Auto-Tune Loop
@@ -178,37 +208,31 @@ flowchart TD
     C --> D{PLECS running?}
     D -- No --> E[Launch PLECS.exe]
     E --> C
-    D -- Yes --> F["Compute initial Kp/Ki/Kd/Kf\nfrom wc_initial, phi_m_initial"]
+    D -- Yes --> F["Compute initial Kp/Ki/Kd/Kf from wc_initial, phi_m_initial"]
     F --> G[/Iteration i = 0/]
-    G --> H["Write Kp/Ki/Kd/Kf\ninto .plecs XML file"]
-    H --> I[Load modified model via RPC]
-    I --> J[Run simulation via RPC]
-    J --> K[Export Scope CSV via RPC]
-    K --> L["Save iter_i.csv to results/"]
-    L --> M[Analyze waveform]
-    M --> N{Pass?}
-    N -- Yes --> O[Save tuning_log.csv]
-    O --> P([PASS - Done])
-    N -- No --> Q{i >= max_iterations?}
-    Q -- Yes --> R[Save tuning_log.csv]
-    R --> S([FAIL - Max iterations reached])
-    Q -- No --> T["Adjust wc, phi_m via PidTuner.adjust"]
-    T --> U["Recompute Kp/Ki/Kd/Kf analytically"]
-    U --> V[i = i + 1]
-    V --> H
+    G --> H["Update Kp/Ki/Kd/Kf in loaded model via RPC"]
+    H --> I["Run simulation via RPC (plecs.simulate)"]
+    I --> J["Analyze waveform: OS, US, Osc, Ts"]
+    J --> K["Optional: run loop-gain Bode analysis"]
+    K --> L["Save iter PNG frame + Excel workbooks"]
+    L --> M{Meets all targets?}
+    M -- Yes (PASS) --> N["Continue to post-pass scan/fine phases"]
+    M -- No --> O{Max iterations?}
+    O -- Yes --> P[Report best iteration found]
+    O -- No --> Q["GridRefinePidTuner.adjust: next wc, phi_m"]
+    Q --> R["Recompute Kp/Ki/Kd/Kf analytically"]
+    R --> G
 ```
-
----
 
 ### Compensator Design (CompensatorDesign.compute)
 
 ```mermaid
 flowchart TD
-    A([wc, phi_m]) --> B["wl = wc / 10\nintegral pole decade below crossover"]
-    B --> C["Evaluate plant: Gvd(j*wc)\n-> gain_plant, phi_plant"]
-    C --> D["phi_boost = (-pi + phi_m) - phi_plant\nphase the compensator must add"]
+    A([wc, phi_m]) --> B["wl = wc / 10"]
+    B --> C["Evaluate plant Gvd(j*wc) -> gain_plant, phi_plant"]
+    C --> D["phi_boost = (-pi + phi_m) - phi_plant"]
     D --> E{"phi_boost in (-90deg, 90deg)?"}
-    E -- No --> F["Clamp to +/-89.4 deg\navoid numerical singularity"]
+    E -- No --> F["Clamp to +/-89.4 deg"]
     F --> G
     E -- Yes --> G["wz = wc*sqrt((1-sin)/(1+sin))\nwp = wc*sqrt((1+sin)/(1-sin))"]
     G --> H["Gpid0 = (1/gain_plant)*sqrt(...)"]
@@ -216,135 +240,88 @@ flowchart TD
     I --> J([Return Kp, Ki, Kd, Kf])
 ```
 
----
+### Grid-Refine Search (GridRefinePidTuner.adjust)
+
+```mermaid
+flowchart TD
+    A([OS, US, Osc, Ts]) --> B["Record score and pass status"]
+    B --> C{Phase?}
+    C -- bootstrap --> D["Switch to coarse_grid\nPop first coarse candidate"]
+    C -- coarse_grid --> E{More coarse candidates?}
+    E -- Yes --> F["Pop next coarse candidate"]
+    E -- No --> G["Build 5x5 local grid around best point\nSwitch to local_refine"]
+    C -- local_refine --> H{Any passing result?}
+    H -- Yes --> I["Build post-pass scan candidates\nSwitch to post_pass_scan"]
+    H -- No --> J{More local candidates?}
+    J -- Yes --> K["Pop next local candidate"]
+    J -- No --> L["Rebuild local grid around best\nrecenter"]
+    I --> M["Pop post-pass candidate"]
+    C -- post_pass_scan --> N{Budget exhausted?}
+    N -- No --> O["Pop next scan candidate"]
+    N -- Yes --> P["Find best passing point by min OS^2+US^2\nBuild fine grid\nSwitch to post_pass_fine"]
+    C -- post_pass_fine --> Q{More fine candidates?}
+    Q -- Yes --> R["Pop next fine candidate"]
+    Q -- No --> S["Shrink step size (level++)\nRebuild fine grid"]
+    D & F & G & K & L & M & O & P & R & S --> T["Clamp wc, phi_m to limits"]
+    T --> U["Recompute Kp/Ki/Kd/Kf analytically"]
+    U --> V([Return Kp, Ki, Kd, Kf])
+```
 
 ### Response Analysis (ResponseAnalyzer.analyze)
 
 ```mermaid
 flowchart TD
-    A([header, data rows]) --> B["Identify columns: time, Vout, IL"]
-    B --> C["Moving-average filter Vout\nwindow = 4 switching cycles\nto suppress 250 kHz ripple"]
-    C --> D["Detect load-step time from IL step edge"]
-    D --> E{"Step found in lower\n75% of simulation?"}
-    E -- No --> F[Use last detected step]
-    E -- Yes --> G["step_t = first step after 25% startup"]
-    F --> H
-    G --> H["Extract segment:\nstep_idx to step_idx + 3 ms"]
-    H --> I["v_peak  = max of RAW Vout segment\nv_valley = min of RAW Vout segment"]
-    I --> J["overshoot  = (v_peak - 5.0) / 5.0 x 100\nundershoot = (5.0 - v_valley) / 5.0 x 100"]
-    J --> K["Count oscillations on lightly-filtered signal"]
-    K --> L["Settling time:\nfirst block within +/-2% of 5V"]
-    L --> M([Return OS%, US%, osc_count, t_settle])
-```
-
----
-
-### Oscillation Counter
-
-```mermaid
-flowchart TD
-    A([filtered Vout segment]) --> B["Find all local maxima\nusing 1/4 LC-period neighborhood\n~580 samples at 7.5 kHz"]
-    B --> C["Find all local minima\nwith same neighborhood"]
-    C --> D["Deduplicate peaks:\nkeep only highest within\nhalf LC-period window"]
-    D --> E["Deduplicate valleys:\nkeep only lowest within\nhalf LC-period window"]
-    E --> F["Filter: keep peaks where\nv_peak - 5V > 1% of 5V\ni.e. > 50 mV above target"]
-    F --> G["Filter: keep valleys where\n5V - v_valley > 1% of 5V\ni.e. > 50 mV below target"]
-    G --> H["osc_count = max(num_peaks, num_valleys)"]
-    H --> I([Return osc_count])
-```
-
----
-
-### PID Tuner Adjustment (PidTuner.adjust)
-
-```mermaid
-flowchart TD
-    A([OS, US, osc_count]) --> B["score = excess_OS + excess_US + excess_osc x 3"]
-    B --> C{score < best_score?}
-    C -- Yes --> D["Update best_wc, best_phi_m\nreset stall_count"]
-    C -- No --> E[stall_count += 1]
-    D --> F
-    E --> G{stall_count >= 5?}
-    G -- Yes --> H{"Stuck at wc_min\nwith oscillations?"}
-    H -- Yes --> I["Jump: wc = 2 x wc_min\nreset phi_m to initial"]
-    H -- No --> J["Revert to best_wc, best_phi_m\napply small perturbation"]
-    I --> K
-    J --> K
-    G -- No --> F[Evaluate failure modes]
-    F --> L{Oscillations?}
-    L -- Yes --> M["phi_m += 0.05*decay\nwc = wc*(1-0.05*decay)\nmore damping + lower BW"]
-    L -- No --> N{Overshoot only?}
-    N -- Yes --> O{OS > 2x target?}
-    O -- Yes --> P["wc = wc*(1-0.15*decay)\nreduce BW aggressively"]
-    O -- No --> Q["phi_m += 0.03*decay\nwc = wc*(1-0.05*decay)"]
-    N -- No --> R{Undershoot only?}
-    R -- Yes --> S["wc = wc*(1+0.10*decay)\nincrease bandwidth"]
-    R -- No --> T{Both OS and US?}
-    T -- Yes --> U{US > OS x 1.5?}
-    U -- Yes --> V["wc = wc*(1+0.08*decay)\nbandwidth-limited"]
-    U -- No --> W{OS > US x 1.5?}
-    W -- Yes --> X["wc = wc*(1-0.10*decay)"]
-    W -- No --> Y["phi_m += 0.04*decay\nresonance issue"]
-    M --> K
-    P --> K
-    Q --> K
-    S --> K
-    V --> K
-    X --> K
-    Y --> K
-    K["Clamp wc, phi_m to limits"] --> Z["Recompute Kp/Ki/Kd/Kf analytically"]
-    Z --> AA([Return new Kp, Ki, Kd, Kf])
+    A([header, data rows]) --> B["Identify time, Vout, IL columns"]
+    B --> C["Moving-average filter Vout (ripple_filter_samples window)"]
+    C --> D["Detect load-step times from IL edge jumps"]
+    D --> E["Skip first 30% of simulation (startup transient)"]
+    E --> F["Select up to 2 steps after startup"]
+    F --> G["For each step: analyse transient window"]
+    G --> H["v_peak / v_valley from RAW Vout segment"]
+    H --> I["OS = (v_peak - 5V) / 5V x 100\nUS = (5V - v_valley) / 5V x 100"]
+    I --> J["Count oscillations on filtered signal"]
+    J --> K["Settling time: first point where filtered Vout\nstays within dynamic band"]
+    K --> L["Return worst-case OS, US, Osc, Ts across all steps"]
 ```
 
 ---
 
 ## Response Analysis
 
-### Overshoot and Undershoot Definition
+### Overshoot and Undershoot
 
-Both metrics are computed from the **raw (unfiltered)** Vout waveform in the transient window immediately after the detected load step:
+Measured from **raw (unfiltered)** Vout in the transient window after each detected load step:
 
 ```
-v_peak   = max(Vout[step_idx : step_idx + 3 ms])
-v_valley = min(Vout[step_idx : step_idx + 3 ms])
-
-overshoot  = max(0,  v_peak   – 5.0) / 5.0 × 100 %
-undershoot = max(0,  5.0 – v_valley) / 5.0 × 100 %
+overshoot  = max(0, v_peak   – 5.0) / 5.0 × 100 %
+undershoot = max(0, 5.0 – v_valley) / 5.0 × 100 %
 ```
 
-The reference is the **nominal setpoint (5.0 V)**, not the pre-step average. Because the converter is closed-loop, the pre-step steady state is very close to 5.0 V, so the difference is negligible. Raw data is used (not filtered) because filtering with a wide window would reduce the visible peak/valley amplitude and underestimate the true excursion.
-
-**Note:** Switching ripple (~50–100 mV peak-to-peak at 250 kHz) adds a small bias of ~0.5–1% to both numbers. This is inherent to using peak/valley of the raw signal.
+Both step-up and step-down transients are analysed; the worst-case values are reported.
 
 ### Oscillation Counting
 
-Oscillations are counted on the **lightly filtered** signal (4-cycle moving average) to remove switching ripple while preserving the envelope oscillations:
+Oscillations are counted on the **lightly filtered** signal to remove switching ripple while preserving the envelope oscillations:
 
-1. Local peaks/valleys are found using a neighbourhood of ¼ LC period (~33 µs, ~580 samples) — wide enough to ignore ripple bumps
-2. Duplicate detections within ½ LC period are merged (keep the most extreme)
-3. Only peaks/valleys that deviate more than 1% (50 mV) from 5 V are kept — avoids counting settled residual noise
+1. Local peaks/valleys found using a ¼ LC-period neighbourhood (~33 µs)
+2. Duplicates within ½ LC period merged (keep most extreme)
+3. Only peaks/valleys deviating > 1% (50 mV) from 5 V are counted
 
----
+### Settling Time
 
-## Tuning Strategy
+Uses an adaptive band derived from the ripple amplitude at the tail of the analysis window, with a minimum of ±10 mV. The signal must stay inside both the filtered band and a raw peak-to-peak ripple limit before settling is declared — this prevents a ringing waveform that averages to 5 V from being called settled too early.
 
-The 2D search space and the rule-based adjustments:
+### Bode Analysis
 
-| Failure mode | Action | Physical reasoning |
-|---|---|---|
-| Oscillations (osc > 2) | phi_m ↑, wc ↓ slightly | More phase margin damps the resonance |
-| High overshoot (OS > target) | wc ↓ | Lower bandwidth = slower, less overshoot |
-| Very high overshoot (OS > 2× target) | wc ↓↓ aggressively | Get far from resonance quickly |
-| Moderate overshoot | phi_m ↑, wc ↓ slightly | Phase-margin-limited damping |
-| Undershoot only | wc ↑ | Higher bandwidth = faster recovery |
-| Both OS and US | phi_m ↑ | Suggests near-resonance: add damping |
-| Stall (5 consecutive non-improvements) | Revert to best + small perturbation | Escape local plateau |
-| Stuck at wc_min with oscillations | Jump to 2×wc_min | Escape resonance singularity |
+After each time-domain simulation, a loop-gain frequency response is optionally extracted using PLECS's built-in analysis tool:
 
-**Decay factor:** adjustment step sizes scale as `max(0.2, 1 – 0.05×iteration)`, reducing aggressiveness as iterations progress to refine rather than overshoot the optimum.
-
-**Score function:** `score = excess_OS + excess_US + excess_osc × 3`
-Oscillations are weighted 3× heavier because they are harder to fix and indicate fundamental stability problems.
+1. The 1A load pulse generator is temporarily commented out (steady-state operating point)
+2. A coarse sweep ("Loop Gain (Frequency Response)") is run across the configured range
+3. A dense sweep ("Loop Gain (Peak Dense)") adds resolution around the crossover region
+4. The two sweeps are merged and the following metrics are computed:
+   - **fc** — gain crossover frequency (0 dB crossing)
+   - **PM** — phase margin (180° + phase at fc)
+   - **GM** — gain margin (–magnitude at –180° phase crossing)
 
 ---
 
@@ -357,34 +334,50 @@ python gui.py
 ```
 
 ```
-+-----------------------------------------------+
-|  Left panel (scrollable, 350px)               |
-|  - Circuit screenshot (captured from PLECS)   |
-|  - PID parameter spinboxes (Kp/Ki/Kd/Kf)     |
-|  - Design variable spinboxes (wc, phi_m)      |
-|    + [Compute PID] button                     |
-|  - Target spinboxes (OS%, US%, max_osc, iter) |
-|  - Control buttons:                           |
-|    [Start Auto-Tune]  [Run Single Iteration]  |
-|    [Pause] [Resume] [Stop]                    |
-|    [Save Animation GIF]  [Reset to Defaults]  |
-|  - Log text area                              |
-+-----------------------------------------------+
-|  Right panel (stretches)                      |
-|  - Live waveform canvas (dark theme)          |
-|    - Current iteration waveform               |
-|    - Ghost traces of previous iterations      |
-|    - OS/US shaded bands (dynamically sized)   |
-|    - Peak/valley scatter markers              |
-|  - Metrics canvas                             |
-|    - OS/US % vs iteration number (line chart) |
-|    - Oscillation count vs iteration (bar)     |
-+-----------------------------------------------+
-| Status bar: "Iter 5 — FAIL — OS=3.2% US=6.7%"|
-+-----------------------------------------------+
++--------------------------------------------+------------------------------------------+
+|  Left panel (scrollable)                   |  Right panel                             |
+|                                            |                                          |
+|  Circuit screenshot                        |  [Waveform canvas]  [Bode canvas]        |
+|                                            |   Live Vout trace    Magnitude (dB)      |
+|  PID Parameters                            |   Ghost traces       Phase (deg)         |
+|    Kp / Ki / Kd / Kf spinboxes            |   OS/US bands        fc / PM / GM        |
+|                                            |                                          |
+|  Design Variables                          |  [Metrics canvas]                        |
+|    wc (rad/s) / phi_m (deg) spinboxes     |   OS% / US% trend                        |
+|    [Compute PID from wc / phi_m]           |   Oscillation count bar                  |
+|                                            |   Settling time trend                    |
+|  Targets                                   |                                          |
+|    OS% / US% / Max Osc / Max Ts / Iter    +------------------------------------------+
+|                                            |
+|  Bode Analysis                             |
+|    [x] Run bode plot analysis              |
+|    Start f / Stop f / Extraction Cycles   |
+|    Coarse Points / Dense Points           |
+|                                            |
+|  Controls                                  |
+|    [Start Auto-Tune]                       |
+|    [Run Single Iteration]                  |
+|    [Pause]  [Resume]  [Stop]              |
+|    [Save Animation GIF]                    |
+|    [Reset to Defaults]                     |
+|                                            |
+|  Log                                       |
++--------------------------------------------+
+| Status bar: "Iter 5 — FAIL — OS=3.2% ..." |
++--------------------------------------------+
 ```
 
-The PID spinboxes update live as each iteration completes. During auto-tune they become read-only; after stop/finish they are editable again for manual exploration.
+### Auto-Tune
+
+Runs the full `GridRefinePidTuner` search autonomously for up to `max_iterations` iterations. On completion, the GUI switches to display the best iteration found (lowest OS²+US²). PID spinboxes become read-only during the run.
+
+### Run Single Iteration
+
+Runs one simulation using the current PID spinbox values, then automatically computes the next set of parameters via `tuner.adjust()` and updates the spinboxes. Pressing again steps to the next iteration — this allows manually stepping through the same search sequence as Auto-Tune, one iteration at a time. The tuner state (search phase, visited designs) is preserved between presses.
+
+### Model Sync
+
+Whenever any spinbox value changes, the `.plecs` model file is updated on disk (150 ms debounce) with the new PID gains and Bode analysis settings. This keeps the PLECS file in sync with the GUI at all times.
 
 ---
 
@@ -393,11 +386,11 @@ The PID spinboxes update live as each iteration completes. During auto-tune they
 ### Prerequisites
 
 - Python 3.10+
-- PLECS 5.0 (64-bit) installed at the path in `TuningConfig.plecs_exe`
+- PLECS 5.0 (64-bit) installed at the path configured in `TuningConfig.plecs_exe`
 - Python packages:
 
 ```
-pip install PyQt5 matplotlib numpy
+pip install PyQt5 matplotlib numpy Pillow xlsxwriter
 ```
 
 ### Run the GUI
@@ -412,16 +405,17 @@ python gui.py
 python auto_tune.py
 ```
 
-### Generate visualizations from saved results
+### Generate visualisations from saved results
 
 ```bash
 python analyze.py
 ```
 
-This reads all `results/iter_*.csv` files and `results/tuning_log.csv` and produces:
-- `results/animation.gif` — animated waveform evolution across all iterations
-- `results/metrics.png` — OS/US/oscillation trends
-- `results/path.png` — search path in (wc, phi_m) space
+Reads `results/figures_*/` frame images and Excel workbooks and produces:
+- `animation.gif` — animated waveform evolution across all iterations
+- `metrics.png` — OS/US/oscillation/settling-time trends
+- `path.png` — Kp/Ki/Kd/Kf search path scatter plots
+- `best_iteration.png` — frame for the best iteration
 
 ---
 
@@ -434,28 +428,40 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 | `plecs_exe` | PLECS 5.0 path | Path to PLECS executable |
 | `plecs_model` | `synchronous buck.plecs` | Source model file |
 | `rpc_url` | `http://127.0.0.1:1080/RPC2` | PLECS XML-RPC endpoint |
-| `results_dir` | `results/` | Where to save CSVs and logs |
-| `target_overshoot` | 5.0 % | Max acceptable overshoot |
-| `target_undershoot` | 5.0 % | Max acceptable undershoot |
-| `max_oscillations` | 2 | Max acceptable oscillation count |
-| `max_iterations` | 30 | Iteration budget |
-| `wc_min` | 94,248 rad/s (15 kHz) | Minimum crossover freq (= 2×f0, below this equations become singular near LC resonance) |
-| `wc_max` | 314,159 rad/s (50 kHz) | Maximum crossover freq (= fsw/5) |
+| `results_dir` | `results/` | Root folder for run subfolders |
+| `sim_time_span` | `3e-3` | Simulation duration (s) |
+| `load_pulse_frequency` | `250` | Load pulse frequency (Hz) |
+| `load_pulse_duty_cycle` | `0.25` | Load pulse duty cycle |
+| `load_pulse_delay` | `1e-3` | Delay before first load step (s) |
+| `target_overshoot` | 4.0 % | Max acceptable overshoot |
+| `target_undershoot` | 4.0 % | Max acceptable undershoot |
+| `max_oscillations` | 0 | Max acceptable oscillation count |
+| `target_settling_time` | 1×10⁻⁴ s (0.1 ms) | Max acceptable settling time |
+| `max_iterations` | 40 | Iteration budget |
+| `bode_freq_start_hz` | 1,000 Hz | Bode sweep start frequency |
+| `bode_freq_stop_hz` | 100,000 Hz | Bode sweep stop frequency |
+| `bode_extraction_cycles` | 30 | Cycles per frequency point |
+| `bode_coarse_num_points` | 51 | Points in the coarse sweep |
+| `bode_dense_num_points` | 51 | Points in the dense sweep |
+| `wc_min` | 94,248 rad/s (15 kHz) | Min crossover freq (= 2×f0) |
+| `wc_max` | 314,159 rad/s (50 kHz) | Max crossover freq (= fsw/5) |
 | `wc_initial` | 94,248 rad/s | Starting crossover freq |
-| `phi_m_min` | 0.524 rad (30°) | Minimum phase margin |
-| `phi_m_max` | 1.396 rad (80°) | Maximum phase margin |
+| `phi_m_min` | 0.524 rad (30°) | Min phase margin |
+| `phi_m_max` | 1.396 rad (80°) | Max phase margin |
 | `phi_m_initial` | 0.524 rad (30°) | Starting phase margin |
 
-The default starting point (wc=15 kHz, phi_m=30°) is intentionally poor (near resonance, low damping) to demonstrate the tuner's ability to recover. A nominal starting point would be wc=25 kHz, phi_m=60°.
+The default starting point (wc = 15 kHz, phi_m = 30°) is intentionally poor — near resonance with low damping — to demonstrate the tuner's ability to recover. A good nominal starting point would be wc = 25 kHz, phi_m = 60°.
 
 ---
 
 ## Output Files
 
+Each auto-tune or single-iteration run writes into a timestamped subfolder under `results/`. Up to 5 recent run folders are kept; older ones are pruned automatically.
+
 | File | Content |
 |---|---|
-| `results/iter_NNN.csv` | Raw PLECS scope data for iteration N: columns are `Time`, `IL` (inductor current), `Vout` (output voltage) |
-| `results/tuning_log.csv` | One row per iteration: iter, Kp, Ki, Kd, Kf, overshoot, undershoot, osc_count, settling_time, status |
-| `results/animation.gif` | Dark-theme animated plot showing waveform evolution with ghost traces and OS/US bands |
-| `results/metrics.png` | Two subplots: OS/US % vs iteration, oscillation count vs iteration |
-| `results/path.png` | Scatter plot of (wc, phi_m) search path, colored by iteration number |
+| `results/figures_MMDD_HHMM/iter{N}.png` | Side-by-side waveform + Bode plot for iteration N |
+| `results/figures_MMDD_HHMM/best_iteration.png` | Copy of the best iteration frame |
+| `results/figures_MMDD_HHMM/animation.gif` | Animated waveform evolution |
+| `results/figures_MMDD_HHMM/data_time_iterations.xlsx` | Summary sheet + per-iteration waveform data (Time, IL, Vout) |
+| `results/figures_MMDD_HHMM/data_bode_iterations.xlsx` | Bode summary (fc, PM, GM) + per-iteration frequency response data |

@@ -348,7 +348,7 @@ class TunerWorker(QObject):
             self.config.model_id,
             getattr(self.config, "bode_freq_start_hz", 1e3),
             getattr(self.config, "bode_freq_stop_hz", 1e5),
-            int(getattr(self.config, "bode_num_points", 31)),
+            int(getattr(self.config, "bode_coarse_num_points", 31)),
         )
         fc_text = f"{bode.metrics.crossover_hz / 1000:.2f} kHz" if bode.metrics.crossover_hz is not None else "n/a"
         pm_text = f"{bode.metrics.phase_margin_deg:.1f} deg" if bode.metrics.phase_margin_deg is not None else "n/a"
@@ -386,9 +386,9 @@ class TunerWorker(QObject):
     def _write_workbooks(self, results: List[TuningResult]) -> None:
         results_dir = Path(self.config.results_dir)
         results_dir.mkdir(parents=True, exist_ok=True)
-        write_time_workbook(results_dir / "time_iterations.xlsx", results, self._waveform_store)
+        write_time_workbook(results_dir / "data_time_iterations.xlsx", results, self._waveform_store)
         if self._bode_store:
-            write_bode_workbook(results_dir / "bode_iterations.xlsx", self._bode_store)
+            write_bode_workbook(results_dir / "data_bode_iterations.xlsx", self._bode_store)
 
     def _emit_best_summary(self, results: List[TuningResult]) -> Optional[TuningResult]:
         """Log the best iteration after the full search completes."""
@@ -510,10 +510,11 @@ class TunerWorker(QObject):
             if self._auto_tuner is None:
                 at = AutoTuner(self.config)
                 self._auto_tuner = at
-                self.log_message.emit("Connecting to PLECS...")
-                at.setup()
-                self.log_message.emit("Connected.")
             at = self._auto_tuner
+            self.log_message.emit("Connecting to PLECS...")
+            at.config = self.config
+            at.setup()
+            self.log_message.emit("Connected. Model reloaded with current GUI bode settings.")
 
             phase = getattr(at.tuner, "phase", "unknown")
             result = at.run_iteration(iter_num, Kp, Ki, Kd, Kf)
@@ -538,8 +539,13 @@ class TunerWorker(QObject):
                 self.config.target_undershoot,
             )
             self._write_workbooks(at.results)
+            next_Kp, next_Ki, next_Kd, next_Kf = at.tuner.adjust(
+                Kp, Ki, Kd, Kf,
+                result.overshoot, result.undershoot, result.osc_count, result.settling_time
+            )
             self.iteration_complete.emit({
                 'result': result, 'time': t, 'vout': v, 'il': il, 'bode': bode,
+                'next_params': (next_Kp, next_Ki, next_Kd, next_Kf),
             })
             msg = (
                 f"Time Iter {iter_num}: phase={phase} | OS={result.overshoot:.1f}% "
@@ -602,12 +608,16 @@ class BuckTunerGui(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_splitter = QSplitter(Qt.Horizontal, central)
+        main_layout.addWidget(main_splitter)
 
         # Left panel
         left_inner = QWidget()
-        left_inner.setFixedWidth(330)
+        left_inner.setMinimumWidth(280)
         left_layout = QVBoxLayout(left_inner)
-        left_layout.setContentsMargins(4, 4, 4, 4)
+        left_layout.setContentsMargins(8, 4, 6, 4)
         left_layout.setSpacing(4)
 
         # Circuit image
@@ -650,7 +660,7 @@ class BuckTunerGui(QMainWindow):
         self.spin_tgt_us = self._make_spin("Target US%:", 0, 50, 1, 0.5, 4.0, tgt_layout)
         self.spin_max_osc = self._make_spin("Max Osc:", 0, 20, 0, 1, 0, tgt_layout)
         self.spin_tgt_settle = self._make_spin("Max Ts (ms):", 0.01, 10, 3, 0.05, cfg.target_settling_time * 1000, tgt_layout)
-        self.spin_max_iter = self._make_spin("Max Iter:", 1, 200, 0, 5, 50, tgt_layout)
+        self.spin_max_iter = self._make_spin("Max Iter:", 1, 200, 0, 5, 40, tgt_layout)
         left_layout.addWidget(grp_tgt)
 
         grp_bode = CollapsibleSection("Bode Analysis", expanded=True)
@@ -660,7 +670,9 @@ class BuckTunerGui(QMainWindow):
         bode_layout.addWidget(self.chk_run_bode)
         self.spin_bode_f_start = self._make_spin("Start f (Hz):", 10, 1e7, 0, 100, 1000, bode_layout)
         self.spin_bode_f_stop = self._make_spin("Stop f (Hz):", 100, 1e7, 0, 1000, 100000, bode_layout)
-        self.spin_bode_points = self._make_spin("Points:", 5, 500, 0, 1, 31, bode_layout)
+        self.spin_bode_cycles = self._make_spin("Extraction Cycles:", 1, 500, 0, 1, cfg.bode_extraction_cycles, bode_layout)
+        self.spin_bode_coarse_points = self._make_spin("Coarse Num Points:", 5, 500, 0, 1, cfg.bode_coarse_num_points, bode_layout)
+        self.spin_bode_dense_points = self._make_spin("Dense Num Points:", 5, 500, 0, 1, cfg.bode_dense_num_points, bode_layout)
         left_layout.addWidget(grp_bode)
 
         # Controls
@@ -728,11 +740,11 @@ class BuckTunerGui(QMainWindow):
         left_scroll = QScrollArea()
         left_scroll.setWidget(left_inner)
         left_scroll.setWidgetResizable(True)
-        left_scroll.setFixedWidth(350)
+        left_scroll.setMinimumWidth(292)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         left_scroll.setFrameShape(left_scroll.NoFrame)
-        main_layout.addWidget(left_scroll)
+        main_splitter.addWidget(left_scroll)
 
         # Right panel
         right_splitter = QSplitter(Qt.Vertical)
@@ -756,7 +768,11 @@ class BuckTunerGui(QMainWindow):
         right_splitter.setStretchFactor(0, 5)
         right_splitter.setStretchFactor(1, 3)
         right_splitter.setSizes([700, 240])
-        main_layout.addWidget(right_splitter, stretch=1)
+        main_splitter.addWidget(right_splitter)
+        main_splitter.setChildrenCollapsible(False)
+        main_splitter.setStretchFactor(0, 0)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setSizes([312, 1000])
 
         # Status bar
         self.statusBar().showMessage("Ready")
@@ -765,7 +781,7 @@ class BuckTunerGui(QMainWindow):
     def _make_spin(self, label, lo, hi, decimals, step, default, layout):
         row = QHBoxLayout()
         lbl = QLabel(label)
-        lbl.setFixedWidth(95)
+        lbl.setFixedWidth(96)
         row.addWidget(lbl)
         spin = QDoubleSpinBox()
         spin.setRange(lo, hi)
@@ -852,7 +868,9 @@ class BuckTunerGui(QMainWindow):
         cfg.run_bode_analysis = self.chk_run_bode.isChecked()
         cfg.bode_freq_start_hz = self.spin_bode_f_start.value()
         cfg.bode_freq_stop_hz = self.spin_bode_f_stop.value()
-        cfg.bode_num_points = int(self.spin_bode_points.value())
+        cfg.bode_extraction_cycles = int(self.spin_bode_cycles.value())
+        cfg.bode_coarse_num_points = int(self.spin_bode_coarse_points.value())
+        cfg.bode_dense_num_points = int(self.spin_bode_dense_points.value())
         if self._current_results_dir is not None:
             cfg.results_dir = str(self._current_results_dir)
         return cfg
@@ -863,7 +881,8 @@ class BuckTunerGui(QMainWindow):
             self.spin_wc, self.spin_phim,
             self.spin_tgt_os, self.spin_tgt_us, self.spin_max_osc,
             self.spin_tgt_settle, self.spin_max_iter,
-            self.spin_bode_f_start, self.spin_bode_f_stop, self.spin_bode_points,
+            self.spin_bode_f_start, self.spin_bode_f_stop,
+            self.spin_bode_cycles, self.spin_bode_coarse_points, self.spin_bode_dense_points,
         ]
         for widget in widgets:
             widget.valueChanged.connect(self._queue_model_sync)
@@ -908,7 +927,16 @@ class BuckTunerGui(QMainWindow):
                 content, "Loop Gain (Frequency Response)", "FrequencyRange", freq_range
             )
             content = self._replace_analysis_param(
-                content, "Loop Gain (Frequency Response)", "NumPoints", str(int(self.spin_bode_points.value()))
+                content, "Loop Gain (Frequency Response)", "NumPoints", str(int(self.spin_bode_coarse_points.value()))
+            )
+            content = self._replace_analysis_param(
+                content, "Loop Gain (Frequency Response)", "ExtractionCycles", str(int(self.spin_bode_cycles.value()))
+            )
+            content = self._replace_analysis_param(
+                content, "Loop Gain (Peak Dense)", "NumPoints", str(int(self.spin_bode_dense_points.value()))
+            )
+            content = self._replace_analysis_param(
+                content, "Loop Gain (Peak Dense)", "ExtractionCycles", str(int(self.spin_bode_cycles.value()))
             )
 
             meta_values = {
@@ -922,7 +950,9 @@ class BuckTunerGui(QMainWindow):
                 "run_bode_analysis": "1" if self.chk_run_bode.isChecked() else "0",
                 "bode_start_hz": f"{self.spin_bode_f_start.value():.12g}",
                 "bode_stop_hz": f"{self.spin_bode_f_stop.value():.12g}",
-                "bode_points": f"{int(self.spin_bode_points.value())}",
+                "bode_extraction_cycles": f"{int(self.spin_bode_cycles.value())}",
+                "bode_coarse_points": f"{int(self.spin_bode_coarse_points.value())}",
+                "bode_dense_points": f"{int(self.spin_bode_dense_points.value())}",
             }
             metadata = self._build_gui_metadata_block(meta_values)
             script_pattern = r'(?ms)(Script\s*\{\s*Name\s+"Script"\s*Script\s+)\"[^\"]*\"'
@@ -972,6 +1002,10 @@ class BuckTunerGui(QMainWindow):
     def _cleanup_worker(self):
         if self._worker:
             self._worker.stop()
+            try:
+                self._run_single_sig.disconnect(self._worker.run_single)
+            except TypeError:
+                pass
         if self._thread:
             self._thread.quit()
             self._thread.wait(3000)
@@ -991,6 +1025,8 @@ class BuckTunerGui(QMainWindow):
             self.statusBar().showMessage("Auto-tune already completed.")
             return
 
+        self._model_sync_timer.stop()
+        self._sync_gui_to_plecs_file()
         cfg = self._make_config()
         self._results.clear()
         self._waveform_history.clear()
@@ -1014,6 +1050,8 @@ class BuckTunerGui(QMainWindow):
     def on_run_single(self):
         if self._iter_counter == 0:
             self._clear_bode_results()
+        self._model_sync_timer.stop()
+        self._sync_gui_to_plecs_file()
         cfg = self._make_config()
         cfg.results_dir = str(self._current_results_dir)
         if self._worker is None:
@@ -1079,7 +1117,9 @@ class BuckTunerGui(QMainWindow):
         self.chk_run_bode.setChecked(True)
         self.spin_bode_f_start.setValue(1000)
         self.spin_bode_f_stop.setValue(100000)
-        self.spin_bode_points.setValue(31)
+        self.spin_bode_cycles.setValue(cfg.bode_extraction_cycles)
+        self.spin_bode_coarse_points.setValue(cfg.bode_coarse_num_points)
+        self.spin_bode_dense_points.setValue(cfg.bode_dense_num_points)
 
         # Clear plots
         self.waveform_canvas._draw_empty(
@@ -1164,11 +1204,18 @@ class BuckTunerGui(QMainWindow):
         self._waveform_history.append(data)
         self._iter_counter = result.iter_num + 1
 
-        # Update PID fields
-        self.spin_kp.setValue(result.Kp)
-        self.spin_ki.setValue(result.Ki)
-        self.spin_kd.setValue(result.Kd)
-        self.spin_kf.setValue(result.Kf)
+        # Update PID fields: show next iteration's params if available, else current
+        if 'next_params' in data:
+            next_Kp, next_Ki, next_Kd, next_Kf = data['next_params']
+            self.spin_kp.setValue(next_Kp)
+            self.spin_ki.setValue(next_Ki)
+            self.spin_kd.setValue(next_Kd)
+            self.spin_kf.setValue(next_Kf)
+        else:
+            self.spin_kp.setValue(result.Kp)
+            self.spin_ki.setValue(result.Ki)
+            self.spin_kd.setValue(result.Kd)
+            self.spin_kf.setValue(result.Kf)
 
         # Update plots
         idx = len(self._waveform_history) - 1
@@ -1229,12 +1276,17 @@ class BuckTunerGui(QMainWindow):
         if self._run_mode == "auto":
             self._auto_tune_completed = True
             self._show_best_iteration()
-        if success:
-            self.on_log("=== SEARCH COMPLETE: best iteration meets target ===")
+            if success:
+                self.on_log("=== SEARCH COMPLETE: best iteration meets target ===")
+            else:
+                self.on_log("=== SEARCH COMPLETE: showing best iteration found ===")
+            self._run_mode = None
+            self._cleanup_worker()
         else:
-            self.on_log("=== SEARCH COMPLETE: showing best iteration found ===")
-        self._run_mode = None
-        self._cleanup_worker()
+            # Single mode: keep worker alive to preserve tuner state between presses
+            if success:
+                self.on_log("=== PASS ===")
+            self._run_mode = None
 
     @pyqtSlot(str)
     def on_log(self, msg: str):
@@ -1262,7 +1314,9 @@ class BuckTunerGui(QMainWindow):
         self.chk_run_bode.setEnabled(not running)
         self.spin_bode_f_start.setReadOnly(running)
         self.spin_bode_f_stop.setReadOnly(running)
-        self.spin_bode_points.setReadOnly(running)
+        self.spin_bode_cycles.setReadOnly(running)
+        self.spin_bode_coarse_points.setReadOnly(running)
+        self.spin_bode_dense_points.setReadOnly(running)
 
     def closeEvent(self, event):
         self._cleanup_worker()

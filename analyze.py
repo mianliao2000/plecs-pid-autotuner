@@ -100,7 +100,9 @@ def _read_summary_from_xlsx(path: Path) -> List[Dict]:
 def load_tuning_log(results_dir: Optional[str] = None) -> List[Dict]:
     """Load tuning summary from workbook, with CSV fallback for older runs."""
     base = Path(results_dir or RESULTS_DIR)
-    workbook_path = base / "time_iterations.xlsx"
+    workbook_path = base / "data_time_iterations.xlsx"
+    if not workbook_path.exists():
+        workbook_path = base / "time_iterations.xlsx"
     rows = _read_summary_from_xlsx(workbook_path)
     if rows:
         return rows

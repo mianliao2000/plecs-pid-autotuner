@@ -232,7 +232,12 @@ class TuningConfig:
     target_undershoot: float = 4.0
     max_oscillations: int = 0
     target_settling_time: float = 1e-4
-    max_iterations: int = 50
+    max_iterations: int = 40
+    bode_freq_start_hz: float = 1000.0
+    bode_freq_stop_hz: float = 100000.0
+    bode_extraction_cycles: int = 30
+    bode_coarse_num_points: int = 51
+    bode_dense_num_points: int = 51
     # --- Design variable ranges ---
     # wc: crossover frequency (rad/s)
     #   min: LC resonance w0 ~ 47,140 rad/s (7.5 kHz)
@@ -682,75 +687,6 @@ class ResponseAnalyzer:
 
     def analyze(self, header: List[str], data: List[List[float]]) -> Tuple[float, float, int, float]:
         """
-        Analyze Vout response.
-        Returns: (overshoot %, undershoot %, oscillation count, settling time)
-        """
-        if not data or len(data) < 10:
-            return 10.0, 10.0, 5, 0.005
-
-        n = len(data)
-        time_col = 0
-        vout_col = self._find_col(header, 'voltage', 'vout', 'output')
-        if vout_col < 0:
-            vout_col = 2 if len(header) >= 3 else 1
-        il_col = self._find_col(header, 'current', 'il', 'load')
-        if il_col < 0:
-            il_col = 1
-
-        time_vals = [row[time_col] for row in data]
-        vout_raw  = [row[vout_col] for row in data]
-        il_vals   = [row[il_col]   for row in data]
-
-        total_time = time_vals[-1] - time_vals[0]
-        avg_dt = total_time / (n - 1) if n > 1 else 1e-6
-        ripple_window = max(1, self.ripple_filter_samples)
-        vout_filt = self._moving_average(vout_raw, ripple_window)
-
-        # Auto-detect load step times
-        step_times = self._detect_step_times(time_vals, il_vals)
-        if not step_times:
-            step_times = [time_vals[n // 2]]
-
-        # Skip startup transient: exclude first 25% of simulation
-        # (startup from 0V to Vout takes ~1-2ms and looks like a huge step)
-        sim_duration = time_vals[-1] - time_vals[0]
-        startup_end = time_vals[0] + sim_duration * 0.25
-        steps_after_startup = [t for t in step_times if t > startup_end]
-        step_t = steps_after_startup[0] if steps_after_startup else step_times[-1]
-
-        step_idx  = self._find_idx(time_vals, step_t)
-        end_idx   = self._find_idx(time_vals, step_t + self.transient_window)
-        end_idx   = min(end_idx, n - 1)
-
-        # OS/US: use RAW data (don't filter — filter kills the peaks)
-        seg_raw = vout_raw[step_idx:end_idx]
-        v_peak   = max(seg_raw) if seg_raw else self.v_target
-        v_valley = min(seg_raw) if seg_raw else self.v_target
-
-        overshoot  = max(0.0, (v_peak   - self.v_target) / self.v_target * 100)
-        undershoot = max(0.0, (self.v_target - v_valley) / self.v_target * 100)
-
-        # Oscillation count: on lightly-filtered signal, count envelope peaks
-        osc_count = self._count_oscillations(vout_filt, time_vals, step_idx, end_idx)
-
-        # Settling time: lightly-filtered within ±2% of target
-        v_band = self.v_target * 0.02
-        settling_time = self.transient_window
-        check_block = max(10, ripple_window)
-        for i in range(step_idx, end_idx - check_block):
-            block = vout_filt[i:i + check_block]
-            if max(block) < self.v_target + v_band and min(block) > self.v_target - v_band:
-                settling_time = time_vals[i] - step_t
-                break
-
-        print(f"    [Analyzer] Step@{step_t*1000:.2f}ms | "
-              f"raw Vmax={v_peak:.3f} Vmin={v_valley:.3f} | "
-              f"OS={overshoot:.1f}% US={undershoot:.1f}% Osc={osc_count}")
-
-        return overshoot, undershoot, osc_count, settling_time
-
-    def analyze(self, header: List[str], data: List[List[float]]) -> Tuple[float, float, int, float]:
-        """
         Analyze Vout response across the first two meaningful transients
         after startup and return the worst-case metrics.
         """
@@ -1028,7 +964,8 @@ class GridRefinePidTuner:
         )
 
     def _build_coarse_candidates(self) -> List[Tuple[float, float]]:
-        wc_vals = self._linspace(self.config.wc_min, self.config.wc_max, 5)
+        wc_ratio = self.config.wc_max / self.config.wc_min
+        wc_vals = [self.config.wc_min * wc_ratio ** (i / 4) for i in range(5)]
         phi_vals = self._linspace(self.config.phi_m_min, self.config.phi_m_max, 4)
         candidates: List[Tuple[float, float]] = []
         initial = self._clamp_design(self.config.wc_initial, self.config.phi_m_initial)
