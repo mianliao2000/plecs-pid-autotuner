@@ -19,7 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import xmlrpc.client as x
 
-from auto_tune import TuningConfig
+from auto_tune import PlecsModelEditor, TuningConfig
 
 
 @dataclass
@@ -370,11 +370,12 @@ def run_loop_gain_bode() -> Tuple[Path, Path, BodeMetrics, float]:
     out_csv = results_dir / "loop_gain_bode.csv"
 
     server = x.ServerProxy(cfg.rpc_url, allow_none=True)
+    work_model = PlecsModelEditor().prepare_working_model(cfg.plecs_model, cfg.work_dir, cfg)
     try:
         server.plecs.close(cfg.model_id)
     except Exception:
         pass
-    server.plecs.load(str(Path(cfg.plecs_model).resolve()))
+    server.plecs.load(str(work_model))
 
     bode = run_loop_gain_analysis(server, cfg.model_id, 1e3, 1e5, 31)
     save_bode_csv(out_csv, bode)

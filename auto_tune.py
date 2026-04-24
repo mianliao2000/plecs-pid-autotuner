@@ -3,9 +3,9 @@ PLECS Buck Converter PID Auto-Tuner
 ====================================
 Connects to PLECS via XML-RPC, runs simulations with different PID parameters,
 analyzes output voltage response, and tunes Kp, Ki, Kd, Kf to meet:
-- Overshoot < 8%
-- Undershoot < 8%
-- Oscillations <= 2
+- Overshoot < 4%
+- Undershoot < 4%
+- Oscillations <= 0
 
 Uses analytical Type 3 compensator design: tunes crossover frequency (wc)
 and phase margin (phi_m) as design variables, then computes Kp/Ki/Kd/Kf
@@ -217,11 +217,21 @@ class TuningConfig:
     All Kp/Ki/Kd/Kf bounds are derived by sweeping wc and phi_m
     through the compensator design equations.
     """
-    plecs_exe: str = r"C:\Users\liaom\Documents\Plexim\PLECS 5.0 (64 bit)\PLECS.exe"
-    plecs_model: str = str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve())
-    rpc_url: str = 'http://127.0.0.1:1080/RPC2'
+    plecs_exe: str = os.environ.get("PLECS_EXE", r"C:\Users\liaom\Documents\Plexim\PLECS 5.0 (64 bit)\PLECS.exe")
+    plecs_model: str = os.environ.get(
+        "PLECS_MODEL",
+        str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve()),
+    )
+    rpc_url: str = os.environ.get("PLECS_RPC_URL", 'http://127.0.0.1:1080/RPC2')
     model_id: str = "synchronous buck"
-    results_dir: str = str((Path(__file__).resolve().parent / "results").resolve())
+    results_dir: str = os.environ.get(
+        "PLECS_RESULTS_DIR",
+        str((Path(__file__).resolve().parent / "results").resolve()),
+    )
+    work_dir: str = os.environ.get(
+        "PLECS_WORK_DIR",
+        str((Path(__file__).resolve().parent / "plecs_tuning_work").resolve()),
+    )
     sim_time_span: str = "3e-3"
     load_pulse_frequency: str = "250"
     load_pulse_duty_cycle: str = "0.25"
@@ -238,6 +248,7 @@ class TuningConfig:
     bode_extraction_cycles: int = 30
     bode_coarse_num_points: int = 51
     bode_dense_num_points: int = 51
+    run_bode_analysis: bool = False
     # --- Design variable ranges ---
     # wc: crossover frequency (rad/s)
     #   min: LC resonance w0 ~ 47,140 rad/s (7.5 kHz)
@@ -399,6 +410,55 @@ class PlecsModelEditor:
         commands = re.sub(r'Kd\s*=\s*[\d.e+-]+;', f'Kd = {Kd};', commands)
         commands = re.sub(r'Kp\s*=\s*[\d.e+-]+;', f'Kp = {Kp};', commands)
         return commands
+
+    @staticmethod
+    def _replace_analysis_param(content: str, analysis_name: str, variable: str, value: str) -> str:
+        pattern = (
+            rf'(?ms)(Analysis\s*\{{.*?Name\s+"{re.escape(analysis_name)}".*?^\s*'
+            rf'{re.escape(variable)}\s+)\"[^\"]*\"'
+        )
+        return re.sub(pattern, rf'\1"{value}"', content, count=1)
+
+    @classmethod
+    def update_analysis_settings(cls, content: str, config: TuningConfig) -> str:
+        """Apply Bode-analysis settings to a model-file copy."""
+        freq_range = f"[{config.bode_freq_start_hz:.12g} {config.bode_freq_stop_hz:.12g}]"
+        content = cls._replace_analysis_param(
+            content, "Loop Gain (Frequency Response)", "FrequencyRange", freq_range
+        )
+        content = cls._replace_analysis_param(
+            content, "Loop Gain (Frequency Response)", "NumPoints", str(int(config.bode_coarse_num_points))
+        )
+        content = cls._replace_analysis_param(
+            content, "Loop Gain (Frequency Response)", "ExtractionCycles", str(int(config.bode_extraction_cycles))
+        )
+        content = cls._replace_analysis_param(
+            content, "Loop Gain (Peak Dense)", "NumPoints", str(int(config.bode_dense_num_points))
+        )
+        content = cls._replace_analysis_param(
+            content, "Loop Gain (Peak Dense)", "ExtractionCycles", str(int(config.bode_extraction_cycles))
+        )
+        return content
+
+    def prepare_working_model(self, source_model: str, work_dir: str, config: TuningConfig) -> Path:
+        """Copy the source PLECS model to a disposable work folder and patch only the copy."""
+        source_path = Path(source_model).resolve()
+        if not source_path.exists():
+            raise FileNotFoundError(f"PLECS source model not found: {source_path}")
+
+        run_dir = Path(work_dir).resolve() / time.strftime("run_%Y%m%d_%H%M%S")
+        suffix = 1
+        while run_dir.exists():
+            run_dir = Path(work_dir).resolve() / f"{time.strftime('run_%Y%m%d_%H%M%S')}_{suffix:02d}"
+            suffix += 1
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        work_model_path = run_dir / source_path.name
+        shutil.copyfile(source_path, work_model_path)
+        content = work_model_path.read_text(encoding="utf-8")
+        content = self.update_analysis_settings(content, config)
+        work_model_path.write_text(content, encoding="utf-8")
+        return work_model_path
 
 
 class ScopeCsvParser:
@@ -1150,6 +1210,7 @@ class AutoTuner:
         self.results: List[TuningResult] = []
         self.last_header: List[str] = []
         self.last_data: List[List[float]] = []
+        self.work_model_path: Optional[Path] = None
 
     def _apply_fast_transient_settings(self) -> None:
         """Configure the loaded model for short step-up/step-down tests."""
@@ -1174,14 +1235,13 @@ class AutoTuner:
         print("\n[1] Connecting to PLECS...")
         self.plecs.ensure_plecs_running()
 
-        target_model_path = Path(self.config.plecs_model).resolve()
-        loaded_path = self.plecs.find_loaded_model_path(self.config.model_id)
-        if loaded_path is None:
-            print(f"  Opening source model...")
-            self.plecs.load_model(str(target_model_path))
-        else:
-            print(f"  Reloading source model to pick up latest analysis/settings...")
-            self.plecs.load_model(str(target_model_path), force_reload=True)
+        self.work_model_path = self.model_editor.prepare_working_model(
+            self.config.plecs_model,
+            self.config.work_dir,
+            self.config,
+        )
+        print(f"  Opening working model copy: {self.work_model_path}")
+        self.plecs.load_model(str(self.work_model_path), force_reload=True)
         self._apply_fast_transient_settings()
 
     def run_iteration(self, iter_num: int, Kp: float, Ki: float,
@@ -1193,9 +1253,14 @@ class AutoTuner:
         loaded_path = self.plecs.find_loaded_model_path(self.config.model_id)
 
         if loaded_path is None:
-            target_model_path = Path(self.config.plecs_model).resolve()
-            print(f"  Source model not open, reopening...")
-            self.plecs.load_model(str(target_model_path), force_reload=True)
+            if self.work_model_path is None:
+                self.work_model_path = self.model_editor.prepare_working_model(
+                    self.config.plecs_model,
+                    self.config.work_dir,
+                    self.config,
+                )
+            print(f"  Working model not open, reopening...")
+            self.plecs.load_model(str(self.work_model_path), force_reload=True)
         else:
             self.plecs.model_id = self.config.model_id
             self.plecs.loaded_model_path = loaded_path

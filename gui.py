@@ -10,11 +10,8 @@ Usage:
 import sys
 import math
 import threading
-import io
-import csv
 import time
 import shutil
-import re
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 
@@ -889,80 +886,13 @@ class BuckTunerGui(QMainWindow):
         self.chk_run_bode.toggled.connect(self._queue_model_sync)
 
     def _queue_model_sync(self, *_args) -> None:
-        if not self._model_sync_ready:
-            return
-        self._model_sync_timer.start(150)
-
-    @staticmethod
-    def _replace_analysis_param(content: str, analysis_name: str, variable: str, value: str) -> str:
-        pattern = (
-            rf'(?ms)(Analysis\s*\{{.*?Name\s+"{re.escape(analysis_name)}".*?^\s*'
-            rf'{re.escape(variable)}\s+)\"[^\"]*\"'
-        )
-        return re.sub(pattern, rf'\1"{value}"', content, count=1)
-
-    @staticmethod
-    def _build_gui_metadata_block(values: Dict[str, str]) -> str:
-        lines = [
-            "% GUI_METADATA_BEGIN",
-            *[f"% {key} = {value}" for key, value in values.items()],
-            "% GUI_METADATA_END",
-        ]
-        return "\\n".join(lines)
+        return
 
     def _sync_gui_to_plecs_file(self) -> None:
-        model_path = Path(TuningConfig().plecs_model)
-        if not model_path.exists():
-            return
-
-        try:
-            content = model_path.read_text(encoding="utf-8")
-            content = re.sub(r'Ki\s*=\s*[\d.eE+-]+;', f'Ki = {self.spin_ki.value():.12g};', content)
-            content = re.sub(r'Kf\s*=\s*[\d.eE+-]+;', f'Kf = {self.spin_kf.value():.12g};', content)
-            content = re.sub(r'Kd\s*=\s*[\d.eE+-]+;', f'Kd = {self.spin_kd.value():.12g};', content)
-            content = re.sub(r'Kp\s*=\s*[\d.eE+-]+;', f'Kp = {self.spin_kp.value():.12g};', content)
-
-            freq_range = f"[{self.spin_bode_f_start.value():.12g} {self.spin_bode_f_stop.value():.12g}]"
-            content = self._replace_analysis_param(
-                content, "Loop Gain (Frequency Response)", "FrequencyRange", freq_range
-            )
-            content = self._replace_analysis_param(
-                content, "Loop Gain (Frequency Response)", "NumPoints", str(int(self.spin_bode_coarse_points.value()))
-            )
-            content = self._replace_analysis_param(
-                content, "Loop Gain (Frequency Response)", "ExtractionCycles", str(int(self.spin_bode_cycles.value()))
-            )
-            content = self._replace_analysis_param(
-                content, "Loop Gain (Peak Dense)", "NumPoints", str(int(self.spin_bode_dense_points.value()))
-            )
-            content = self._replace_analysis_param(
-                content, "Loop Gain (Peak Dense)", "ExtractionCycles", str(int(self.spin_bode_cycles.value()))
-            )
-
-            meta_values = {
-                "wc_rad_per_s": f"{self.spin_wc.value():.12g}",
-                "phi_m_deg": f"{self.spin_phim.value():.12g}",
-                "target_os_pct": f"{self.spin_tgt_os.value():.12g}",
-                "target_us_pct": f"{self.spin_tgt_us.value():.12g}",
-                "max_osc": f"{int(self.spin_max_osc.value())}",
-                "max_ts_ms": f"{self.spin_tgt_settle.value():.12g}",
-                "max_iter": f"{int(self.spin_max_iter.value())}",
-                "run_bode_analysis": "1" if self.chk_run_bode.isChecked() else "0",
-                "bode_start_hz": f"{self.spin_bode_f_start.value():.12g}",
-                "bode_stop_hz": f"{self.spin_bode_f_stop.value():.12g}",
-                "bode_extraction_cycles": f"{int(self.spin_bode_cycles.value())}",
-                "bode_coarse_points": f"{int(self.spin_bode_coarse_points.value())}",
-                "bode_dense_points": f"{int(self.spin_bode_dense_points.value())}",
-            }
-            metadata = self._build_gui_metadata_block(meta_values)
-            script_pattern = r'(?ms)(Script\s*\{\s*Name\s+"Script"\s*Script\s+)\"[^\"]*\"'
-            if re.search(script_pattern, content):
-                content = re.sub(script_pattern, rf'\1"{metadata}"', content, count=1)
-
-            model_path.write_text(content, encoding="utf-8")
-        except Exception:
-            # Keep GUI responsive even if metadata sync fails.
-            pass
+        # The GUI deliberately does not write the source .plecs file.
+        # AutoTuner copies the template to plecs_tuning_work/ and patches that
+        # disposable copy with current PID/Bode settings when a run starts.
+        return
 
     def _prune_old_run_folders(self) -> None:
         self._results_root_dir.mkdir(parents=True, exist_ok=True)

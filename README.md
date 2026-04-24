@@ -44,8 +44,9 @@ plecs-pid-autotuner/
 ├── bode_plot.py              # Loop-gain frequency response analysis
 ├── iteration_export.py       # Per-iteration PNG frames and Excel workbooks
 ├── analyze.py                # Post-processing: animation GIF, trend plots
-├── synchronous buck.plecs    # PLECS model (parameters updated each iteration)
+├── synchronous buck.plecs    # PLECS model template (not modified by runs)
 ├── synchronous buck.png      # Circuit screenshot shown in GUI
+├── plecs_tuning_work/        # Disposable per-run model copies
 └── results/
     ├── figures_MMDD_HHMM/    # Timestamped run folder
     │   ├── iter1.png         # Waveform + Bode frame for iteration 1
@@ -375,9 +376,9 @@ Runs the full `GridRefinePidTuner` search autonomously for up to `max_iterations
 
 Runs one simulation using the current PID spinbox values, then automatically computes the next set of parameters via `tuner.adjust()` and updates the spinboxes. Pressing again steps to the next iteration — this allows manually stepping through the same search sequence as Auto-Tune, one iteration at a time. The tuner state (search phase, visited designs) is preserved between presses.
 
-### Model Sync
+### Model Safety
 
-Whenever any spinbox value changes, the `.plecs` model file is updated on disk (150 ms debounce) with the new PID gains and Bode analysis settings. This keeps the PLECS file in sync with the GUI at all times.
+The GUI and CLI do not write the source `.plecs` template during a run. Each run copies the model into `plecs_tuning_work/`, applies the current PID/Bode settings to that disposable copy, and loads the copy through PLECS RPC.
 
 ---
 
@@ -390,7 +391,7 @@ Whenever any spinbox value changes, the `.plecs` model file is updated on disk (
 - Python packages:
 
 ```
-pip install PyQt5 matplotlib numpy Pillow xlsxwriter
+pip install -r requirements.txt
 ```
 
 ### Run the GUI
@@ -429,6 +430,7 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 | `plecs_model` | `synchronous buck.plecs` | Source model file |
 | `rpc_url` | `http://127.0.0.1:1080/RPC2` | PLECS XML-RPC endpoint |
 | `results_dir` | `results/` | Root folder for run subfolders |
+| `work_dir` | `plecs_tuning_work/` | Disposable working model copies |
 | `sim_time_span` | `3e-3` | Simulation duration (s) |
 | `load_pulse_frequency` | `250` | Load pulse frequency (Hz) |
 | `load_pulse_duty_cycle` | `0.25` | Load pulse duty cycle |
@@ -451,6 +453,8 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 | `phi_m_initial` | 0.524 rad (30°) | Starting phase margin |
 
 The default starting point (wc = 15 kHz, phi_m = 30°) is intentionally poor — near resonance with low damping — to demonstrate the tuner's ability to recover. A good nominal starting point would be wc = 25 kHz, phi_m = 60°.
+
+The path-like defaults can also be overridden with environment variables: `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, and `PLECS_WORK_DIR`.
 
 ---
 
