@@ -69,10 +69,29 @@ def result_priority(result: TuningResult) -> Tuple[float, float, float, int, flo
     )
 
 
+def pass_result_priority(result: TuningResult) -> Tuple[float, float, int, float, int]:
+    """
+    Rank passing iterations by the user's visible transient objective.
+
+    Once a result is already PASS, the final selection should favor the smallest
+    combined overshoot + undershoot, with stable tie-breakers for similar runs.
+    """
+    return (
+        result.overshoot + result.undershoot,
+        max(result.overshoot, result.undershoot),
+        result.osc_count,
+        result.settling_time,
+        result.iter_num,
+    )
+
+
 def select_best_result(results: List[TuningResult]) -> Optional[TuningResult]:
-    """Return the best iteration seen so far."""
+    """Return the best iteration seen so far, preferring PASS results."""
     if not results:
         return None
+    passing_results = [r for r in results if r.status.upper() == "PASS"]
+    if passing_results:
+        return min(passing_results, key=pass_result_priority)
     return min(results, key=result_priority)
 
 
@@ -239,6 +258,11 @@ class TuningConfig:
         "LTSPICE_BODE_NETLIST_MODEL",
         str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_bode.cir").resolve()),
     )
+    ltspice_bode_ac_netlist_model: str = os.environ.get(
+        "LTSPICE_BODE_AC_NETLIST_MODEL",
+        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_bode_ac.cir").resolve()),
+    )
+    ltspice_bode_mode: str = os.environ.get("LTSPICE_BODE_MODE", "ac")
     rpc_url: str = os.environ.get("PLECS_RPC_URL", 'http://127.0.0.1:1080/RPC2')
     model_id: str = "synchronous buck"
     results_dir: str = os.environ.get(

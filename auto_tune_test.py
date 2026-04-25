@@ -8,6 +8,8 @@ from auto_tune import (
     PlecsModelEditor,
     ResponseAnalyzer,
     TuningConfig,
+    TuningResult,
+    select_best_result,
 )
 from gui import validate_config_values
 from ltspice_backend import LtspiceRawParser, analytic_loop_gain, normalize_backend
@@ -53,6 +55,31 @@ class GridRefinePidTunerTests(unittest.TestCase):
 
         self.assertEqual(tuner.phase, "coarse_grid")
         self.assertNotEqual(next_params, initial)
+
+
+class BestResultSelectionTests(unittest.TestCase):
+    def test_best_result_prefers_pass_with_lowest_os_plus_us(self):
+        results = [
+            TuningResult(0, 0.1, 1.0, 0.0, 10.0, 0.2, 0.2, 1, 0.001, "FAIL"),
+            TuningResult(1, 0.1, 1.0, 0.0, 10.0, 2.0, 1.5, 0, 0.002, "PASS"),
+            TuningResult(2, 0.1, 1.0, 0.0, 10.0, 1.0, 1.0, 0, 0.003, "PASS"),
+        ]
+
+        best = select_best_result(results)
+
+        self.assertIsNotNone(best)
+        self.assertEqual(best.iter_num, 2)
+
+    def test_best_result_falls_back_to_fail_ranking_when_no_pass_exists(self):
+        results = [
+            TuningResult(0, 0.1, 1.0, 0.0, 10.0, 3.0, 4.0, 1, 0.001, "FAIL"),
+            TuningResult(1, 0.1, 1.0, 0.0, 10.0, 2.0, 2.0, 2, 0.002, "FAIL"),
+        ]
+
+        best = select_best_result(results)
+
+        self.assertIsNotNone(best)
+        self.assertEqual(best.iter_num, 1)
 
 
 class PlecsModelEditorTests(unittest.TestCase):
@@ -134,7 +161,8 @@ class GuiValidationTests(unittest.TestCase):
             asc = tmp_path / "model.asc"
             tran = tmp_path / "model.cir"
             bode = tmp_path / "bode.cir"
-            for path in (asc, tran, bode):
+            bode_ac = tmp_path / "bode_ac.cir"
+            for path in (asc, tran, bode, bode_ac):
                 path.write_text("* model\n.end\n", encoding="utf-8")
             cfg = TuningConfig(
                 sim_backend="ltspice",
@@ -142,6 +170,7 @@ class GuiValidationTests(unittest.TestCase):
                 ltspice_asc_model=str(asc),
                 ltspice_netlist_model=str(tran),
                 ltspice_bode_netlist_model=str(bode),
+                ltspice_bode_ac_netlist_model=str(bode_ac),
             )
 
             errors = validate_config_values(cfg)
@@ -159,6 +188,7 @@ class LtspiceBackendTests(unittest.TestCase):
         self.assertTrue(Path(cfg.ltspice_asc_model).exists())
         self.assertTrue(Path(cfg.ltspice_netlist_model).exists())
         self.assertTrue(Path(cfg.ltspice_bode_netlist_model).exists())
+        self.assertTrue(Path(cfg.ltspice_bode_ac_netlist_model).exists())
 
     def test_trace_name_matching_is_case_insensitive(self):
         names = ["time", "V(vout)", "I(L1)"]

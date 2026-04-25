@@ -187,6 +187,26 @@ class LtspiceRawParser:
         n = min(len(freq_hz), len(response))
         return freq_hz[:n], response[:n]
 
+    @staticmethod
+    def parse_time_voltage_raw(raw_filename: Path, trace_hint: str = "vout") -> Tuple[List[float], List[float]]:
+        _, _, RawRead = import_pyltspice()
+        raw = RawRead(str(raw_filename))
+        try:
+            axis = raw.get_axis()
+        except Exception:
+            axis = raw.get_trace("time")
+        if hasattr(axis, "get_wave"):
+            axis = LtspiceRawParser._wave(axis)
+        time_vals = _as_float_list(axis)
+
+        names = LtspiceRawParser._trace_names(raw)
+        trace_name = LtspiceRawParser.find_trace_name(names, [f"V({trace_hint})", f"v({trace_hint})"], [trace_hint])
+        if trace_name is None:
+            raise ValueError(f"LTspice RAW does not contain V({trace_hint}). Available traces: {names}")
+        values = _as_float_list(LtspiceRawParser._wave(raw.get_trace(trace_name)))
+        n = min(len(time_vals), len(values))
+        return time_vals[:n], values[:n]
+
 
 class LtspiceSimulationRunner:
     """Prepare LTspice working copies, run simulations, and parse RAW outputs."""
@@ -197,6 +217,7 @@ class LtspiceSimulationRunner:
         self.work_asc_path: Optional[Path] = None
         self.work_netlist_path: Optional[Path] = None
         self.work_bode_netlist_path: Optional[Path] = None
+        self.work_bode_ac_netlist_path: Optional[Path] = None
 
     @property
     def ltspice_exe(self) -> str:
@@ -209,9 +230,15 @@ class LtspiceSimulationRunner:
         artifacts = [
             ("ltspice_asc_model", "work_asc_path"),
             ("ltspice_netlist_model", "work_netlist_path"),
-            ("ltspice_bode_netlist_model", "work_bode_netlist_path"),
         ]
+        bode_mode = str(getattr(self.config, "ltspice_bode_mode", "ac") or "ac").strip().lower()
+        if bode_mode in ("switching", "switching_fra", "fra", "transient"):
+            artifacts.append(("ltspice_bode_netlist_model", "work_bode_netlist_path"))
+        else:
+            artifacts.append(("ltspice_bode_ac_netlist_model", "work_bode_ac_netlist_path"))
         for config_attr, instance_attr in artifacts:
+            if not hasattr(self.config, config_attr):
+                continue
             source = Path(getattr(self.config, config_attr)).resolve()
             if not source.exists():
                 raise FileNotFoundError(f"LTspice model artifact not found: {source}")
@@ -294,11 +321,14 @@ class LtspiceSimulationRunner:
         freq_stop_hz: float,
         num_points: int,
     ) -> Tuple[List[float], List[complex], float]:
-        if self.work_bode_netlist_path is None:
+        if self.work_bode_ac_netlist_path is None:
             self.prepare_working_model()
+        template = self.work_bode_ac_netlist_path or self.work_bode_netlist_path
+        if template is None:
+            raise RuntimeError("LTspice AC Bode netlist was not prepared.")
         t0 = time.perf_counter()
         raw_file, _log_file = self._run_now(
-            self.work_bode_netlist_path,
+            template,
             f"bode_{int(time.time() * 1000)}.net",
             Kp=f"{Kp:.17g}",
             Ki=f"{Ki:.17g}",
@@ -312,6 +342,106 @@ class LtspiceSimulationRunner:
         freq_hz, response = LtspiceRawParser.parse_ac_raw(raw_file)
         return freq_hz, response, elapsed_s
 
+    @staticmethod
+    def _fit_sine_response(
+        time_vals: Sequence[float],
+        signal_vals: Sequence[float],
+        freq_hz: float,
+        input_amp: float,
+        fit_start_s: float,
+    ) -> complex:
+        rows = [
+            (t, y)
+            for t, y in zip(time_vals, signal_vals)
+            if t >= fit_start_s
+        ]
+        if len(rows) < 8:
+            raise ValueError(f"Not enough samples to fit switching Bode point at {freq_hz:g} Hz")
+
+        w = 2.0 * math.pi * freq_hz
+        ss = cc = sc = sy = cy = s1 = c1 = y1 = 0.0
+        n = float(len(rows))
+        for t, y in rows:
+            sv = math.sin(w * t)
+            cv = math.cos(w * t)
+            ss += sv * sv
+            cc += cv * cv
+            sc += sv * cv
+            s1 += sv
+            c1 += cv
+            sy += sv * y
+            cy += cv * y
+            y1 += y
+
+        # Solve the 3x3 normal equations for y = a*sin(wt) + b*cos(wt) + c.
+        matrix = [
+            [ss, sc, s1, sy],
+            [sc, cc, c1, cy],
+            [s1, c1, n, y1],
+        ]
+        for col in range(3):
+            pivot = max(range(col, 3), key=lambda row: abs(matrix[row][col]))
+            if abs(matrix[pivot][col]) < 1e-30:
+                raise ValueError(f"Singular sine fit for switching Bode point at {freq_hz:g} Hz")
+            if pivot != col:
+                matrix[col], matrix[pivot] = matrix[pivot], matrix[col]
+            scale = matrix[col][col]
+            for k in range(col, 4):
+                matrix[col][k] /= scale
+            for row in range(3):
+                if row == col:
+                    continue
+                factor = matrix[row][col]
+                for k in range(col, 4):
+                    matrix[row][k] -= factor * matrix[col][k]
+
+        sin_coeff = matrix[0][3]
+        cos_coeff = matrix[1][3]
+        return complex(sin_coeff / input_amp, cos_coeff / input_amp)
+
+    @staticmethod
+    def _loop_gain_from_closed_loop(closed_loop: complex) -> complex:
+        denom = 1.0 - closed_loop
+        if abs(denom) < 1e-12:
+            denom = complex(1e-12, 0.0)
+        return closed_loop / denom
+
+    def run_switching_loop_gain_point(
+        self,
+        freq_hz: float,
+        Kp: float,
+        Ki: float,
+        Kd: float,
+        Kf: float,
+        extraction_cycles: int,
+        perturb_amp: float = 2e-3,
+    ) -> Tuple[complex, float]:
+        if self.work_bode_netlist_path is None:
+            self.prepare_working_model()
+        freq_hz = max(1.0, float(freq_hz))
+        extraction_cycles = max(3, int(extraction_cycles))
+        init_time_s = max(2e-3, 3.0 / freq_hz)
+        measure_time_s = extraction_cycles / freq_hz
+        tstop_s = init_time_s + measure_time_s
+        maxstep_s = min(100e-9, 1.0 / (freq_hz * 80.0))
+        t0 = time.perf_counter()
+        raw_file, _log_file = self._run_now(
+            self.work_bode_netlist_path,
+            f"bode_sw_{int(freq_hz)}_{int(time.time() * 1000)}.net",
+            Kp=f"{Kp:.17g}",
+            Ki=f"{Ki:.17g}",
+            Kd=f"{Kd:.17g}",
+            Kf=f"{Kf:.17g}",
+            fpert=f"{freq_hz:.17g}",
+            pert_amp=f"{perturb_amp:.17g}",
+            tstop=f"{tstop_s:.17g}",
+            maxstep=f"{maxstep_s:.17g}",
+        )
+        time_vals, vout_vals = LtspiceRawParser.parse_time_voltage_raw(raw_file, "vout")
+        elapsed_s = time.perf_counter() - t0
+        closed_loop = self._fit_sine_response(time_vals, vout_vals, freq_hz, perturb_amp, init_time_s)
+        return self._loop_gain_from_closed_loop(closed_loop), elapsed_s
+
 
 def analytic_loop_gain(
     Kp: float,
@@ -324,13 +454,22 @@ def analytic_loop_gain(
     cout_f: float = 15e-6,
     rc_ohm: float = 7.5e-3,
     rl_ohm: float = 50e-3,
+    rload_ohm: float = 5.0,
 ) -> List[complex]:
     """Reference loop-gain calculation used only by tests and fallbacks."""
     response: List[complex] = []
     for freq in freq_hz:
         s = 1j * 2.0 * math.pi * freq
-        plant = vdc * (1.0 + s * rc_ohm * cout_f) / (
-            1.0 + s * (rc_ohm + rl_ohm) * cout_f + s * s * l_h * cout_f
+        plant = vdc * rload_ohm * (1.0 + s * rc_ohm * cout_f) / (
+            rload_ohm
+            + rl_ohm
+            + s * (
+                l_h
+                + cout_f * rload_ohm * rc_ohm
+                + cout_f * rload_ohm * rl_ohm
+                + cout_f * rc_ohm * rl_ohm
+            )
+            + s * s * cout_f * l_h * (rload_ohm + rc_ohm)
         )
         comp = Kp + Ki / s + Kd * Kf * s / (s + Kf)
         response.append(comp * plant)

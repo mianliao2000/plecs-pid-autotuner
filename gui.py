@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QLabel, QPushButton, QDoubleSpinBox, QSpinBox, QCheckBox,
     QTextEdit, QSplitter, QFileDialog, QMessageBox, QLineEdit, QToolButton,
     QProgressBar, QSizePolicy, QScrollArea, QGridLayout, QTableWidget,
-    QTableWidgetItem, QHeaderView, QAbstractItemView, QComboBox
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QComboBox, QTabWidget
 )
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, Qt, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QPalette
@@ -64,10 +64,15 @@ def validate_config_values(config: TuningConfig) -> List[str]:
         for label, path in (
             ("LTspice schematic", config.ltspice_asc_model),
             ("LTspice transient netlist", config.ltspice_netlist_model),
-            ("LTspice Bode netlist", config.ltspice_bode_netlist_model),
         ):
             if not Path(path).exists():
                 errors.append(f"{label} not found: {path}")
+        bode_mode = str(getattr(config, "ltspice_bode_mode", "ac") or "ac").lower()
+        if bode_mode in ("switching", "switching_fra", "fra", "transient"):
+            if not Path(config.ltspice_bode_netlist_model).exists():
+                errors.append(f"LTspice switching Bode netlist not found: {config.ltspice_bode_netlist_model}")
+        elif not Path(config.ltspice_bode_ac_netlist_model).exists():
+            errors.append(f"LTspice AC Bode netlist not found: {config.ltspice_bode_ac_netlist_model}")
         try:
             import_pyltspice()
         except ImportError as exc:
@@ -440,6 +445,8 @@ class TunerWorker(QObject):
             return None
         backend = self.config.backend
         if backend == "ltspice":
+            bode_mode = str(getattr(self.config, "ltspice_bode_mode", "ac") or "ac").lower()
+            mode_label = "Switching FRA" if bode_mode != "ac" else "AC sweep"
             bode = run_ltspice_loop_gain_analysis(
                 self.config,
                 Kp,
@@ -454,7 +461,7 @@ class TunerWorker(QObject):
             fc_text = f"{bode.metrics.crossover_hz / 1000:.2f} kHz" if bode.metrics.crossover_hz is not None else "n/a"
             pm_text = f"{bode.metrics.phase_margin_deg:.1f} deg" if bode.metrics.phase_margin_deg is not None else "n/a"
             self.log_message.emit(
-                f"LTspice Bode iter {iter_num}: fc={fc_text} PM={pm_text} | "
+                f"LTspice {mode_label} Bode iter {iter_num}: fc={fc_text} PM={pm_text} | "
                 f"time total={bode.elapsed_s:.1f}s coarse={bode.coarse_elapsed_s:.1f}s "
                 f"dense={bode.dense_elapsed_s:.1f}s points={len(bode.freq_hz)}"
             )
@@ -521,7 +528,7 @@ class TunerWorker(QObject):
         if best is None:
             return None
         self.log_message.emit(
-            f"Best iteration: {best.iter_num} | "
+            f"Best iteration: {best.iter_num} | {best.status} | "
             f"OS={best.overshoot:.2f}% US={best.undershoot:.2f}% "
             f"Osc={best.osc_count} | "
             f"Kp={best.Kp:.5f} Ki={best.Ki:.2f} Kd={best.Kd:.2e} Kf={best.Kf:.0f}"
@@ -874,46 +881,48 @@ class BuckTunerGui(QMainWindow):
         layout.addWidget(button, row, 2)
         return [name, edit, button], edit
 
-    def _build_backend_panel(self, cfg: TuningConfig) -> CollapsibleSection:
-        panel = CollapsibleSection("Simulation Backend", expanded=True)
-        layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setHorizontalSpacing(6)
-        layout.setVerticalSpacing(4)
-        panel.content_layout.addLayout(layout)
+    def _build_backend_panel(self, cfg: TuningConfig) -> QTabWidget:
+        tabs = QTabWidget()
+        tabs.setObjectName("BackendTabs")
+        tabs.setTabPosition(QTabWidget.North)
+        tabs.setDocumentMode(True)
+        tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tabs_backend = tabs
 
-        layout.addWidget(QLabel("Backend:"), 0, 0)
-        self.combo_backend = QComboBox()
-        self.combo_backend.addItem("PLECS", "plecs")
-        self.combo_backend.addItem("LTspice", "ltspice")
-        self.combo_backend.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
-        layout.addWidget(self.combo_backend, 0, 1, 1, 2)
-
-        self._plecs_path_widgets = []
-        self._ltspice_path_widgets = []
+        plecs_tab = QWidget()
+        plecs_tab.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        plecs_layout = QGridLayout(plecs_tab)
+        plecs_layout.setContentsMargins(0, 4, 0, 6)
+        plecs_layout.setHorizontalSpacing(6)
+        plecs_layout.setVerticalSpacing(4)
         widgets, self.edit_plecs_model = self._add_path_row(
-            layout, 1, "PLECS model:", cfg.plecs_model, "PLECS Models (*.plecs);;All Files (*)")
-        self._plecs_path_widgets.extend(widgets)
+            plecs_layout, 0, "PLECS model:", cfg.plecs_model, "PLECS Models (*.plecs);;All Files (*)")
         widgets, self.edit_plecs_exe = self._add_path_row(
-            layout, 2, "PLECS exe:", cfg.plecs_exe, "Executables (*.exe);;All Files (*)")
-        self._plecs_path_widgets.extend(widgets)
+            plecs_layout, 1, "PLECS exe:", cfg.plecs_exe, "Executables (*.exe);;All Files (*)")
 
+        ltspice_tab = QWidget()
+        ltspice_tab.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        ltspice_layout = QGridLayout(ltspice_tab)
+        ltspice_layout.setContentsMargins(0, 4, 0, 6)
+        ltspice_layout.setHorizontalSpacing(6)
+        ltspice_layout.setVerticalSpacing(4)
         widgets, self.edit_ltspice_exe = self._add_path_row(
-            layout, 3, "LTspice exe:", cfg.ltspice_exe, "Executables (*.exe);;All Files (*)")
-        self._ltspice_path_widgets.extend(widgets)
+            ltspice_layout, 0, "LTspice exe:", cfg.ltspice_exe, "Executables (*.exe);;All Files (*)")
         widgets, self.edit_ltspice_asc = self._add_path_row(
-            layout, 4, "LTspice asc:", cfg.ltspice_asc_model, "LTspice Schematics (*.asc);;All Files (*)")
-        self._ltspice_path_widgets.extend(widgets)
+            ltspice_layout, 1, "LTspice asc:", cfg.ltspice_asc_model, "LTspice Schematics (*.asc);;All Files (*)")
         widgets, self.edit_ltspice_net = self._add_path_row(
-            layout, 5, "LTspice tran:", cfg.ltspice_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
-        self._ltspice_path_widgets.extend(widgets)
+            ltspice_layout, 2, "LTspice tran:", cfg.ltspice_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
         widgets, self.edit_ltspice_bode = self._add_path_row(
-            layout, 6, "LTspice Bode:", cfg.ltspice_bode_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
-        self._ltspice_path_widgets.extend(widgets)
+            ltspice_layout, 3, "Switching Bode:", cfg.ltspice_bode_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
+        widgets, self.edit_ltspice_bode_ac = self._add_path_row(
+            ltspice_layout, 4, "AC Bode:", cfg.ltspice_bode_ac_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
 
-        self.combo_backend.currentIndexChanged.connect(self._on_backend_changed)
+        tabs.addTab(plecs_tab, "PLECS")
+        tabs.addTab(ltspice_tab, "LTspice")
+        tabs.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
+        tabs.currentChanged.connect(self._on_backend_changed)
         QTimer.singleShot(0, self._on_backend_changed)
-        return panel
+        return tabs
 
     def _build_ui(self):
         cfg = TuningConfig()
@@ -992,6 +1001,18 @@ class BuckTunerGui(QMainWindow):
         self.chk_run_bode = QCheckBox("Run bode plot analysis")
         self.chk_run_bode.setChecked(cfg.run_bode_analysis)
         bode_layout.addWidget(self.chk_run_bode)
+        mode_row = QHBoxLayout()
+        self.lbl_ltspice_bode_mode = QLabel("LTspice mode:")
+        self.lbl_ltspice_bode_mode.setFixedWidth(96)
+        mode_row.addWidget(self.lbl_ltspice_bode_mode)
+        self.combo_ltspice_bode_mode = QComboBox()
+        self.combo_ltspice_bode_mode.addItem("AC sweep", "ac")
+        self.combo_ltspice_bode_mode.addItem("Switching FRA", "switching")
+        mode = str(getattr(cfg, "ltspice_bode_mode", "ac") or "ac").lower()
+        self.combo_ltspice_bode_mode.setCurrentIndex(1 if mode in ("switching", "switching_fra", "fra", "transient") else 0)
+        self.combo_ltspice_bode_mode.currentIndexChanged.connect(self._on_backend_changed)
+        mode_row.addWidget(self.combo_ltspice_bode_mode)
+        bode_layout.addLayout(mode_row)
         self.spin_bode_f_start = self._make_spin("Start f (Hz):", 10, 1e7, 0, 100, 1000, bode_layout)
         self.spin_bode_f_stop = self._make_spin("Stop f (Hz):", 100, 1e7, 0, 1000, 100000, bode_layout)
         self.spin_bode_cycles = self._make_spin("Extraction Cycles:", 1, 500, 0, 1, cfg.bode_extraction_cycles, bode_layout)
@@ -1190,6 +1211,36 @@ class BuckTunerGui(QMainWindow):
                 border-radius: 3px; padding: 3px 5px; }
             QDoubleSpinBox:focus, QSpinBox:focus, QLineEdit:focus, QComboBox:focus {
                 border: 1px solid #00d4aa; }
+            QTabWidget#BackendTabs {
+                background: #141416;
+            }
+            QTabWidget#BackendTabs::pane {
+                background: #111113;
+                border: 1px solid #3a3a40;
+                top: -1px;
+            }
+            QTabWidget#BackendTabs QTabBar::tab {
+                background: #2a2a2e;
+                color: #e8e8eb;
+                border: 1px solid #3a3a40;
+                border-bottom: none;
+                border-top-left-radius: 3px;
+                border-top-right-radius: 3px;
+                min-width: 68px;
+                padding: 5px 14px 4px 14px;
+                margin-right: 2px;
+                font-weight: 600;
+            }
+            QTabWidget#BackendTabs QTabBar::tab:selected {
+                background: #f4f4f4;
+                color: #101014;
+                border-top: 2px solid #00a889;
+                padding-top: 4px;
+            }
+            QTabWidget#BackendTabs QTabBar::tab:!selected:hover {
+                background: #34343a;
+                color: #ffffff;
+            }
             QLabel { color: #9a9aa0; }
             QStatusBar { color: #707076; }
             QProgressBar { background: #111113; color: #e8e8eb; border: 1px solid #2a2a2e;
@@ -1211,9 +1262,14 @@ class BuckTunerGui(QMainWindow):
     # ---- Slots ----
 
     def _selected_backend(self) -> str:
-        if not hasattr(self, "combo_backend"):
+        if not hasattr(self, "tabs_backend"):
             return TuningConfig().backend
-        return str(self.combo_backend.currentData() or "plecs")
+        return "ltspice" if self.tabs_backend.currentIndex() == 1 else "plecs"
+
+    def _selected_ltspice_bode_mode(self) -> str:
+        if not hasattr(self, "combo_ltspice_bode_mode"):
+            return TuningConfig().ltspice_bode_mode
+        return str(self.combo_ltspice_bode_mode.currentData() or "ac")
 
     def _browse_path(self, edit: QLineEdit, title: str, file_filter: str) -> None:
         current = Path(edit.text()).expanduser()
@@ -1225,14 +1281,20 @@ class BuckTunerGui(QMainWindow):
     def _on_backend_changed(self, *_args) -> None:
         backend = self._selected_backend()
         show_plecs = backend == "plecs"
-        for widget in getattr(self, "_plecs_path_widgets", []):
-            widget.setVisible(show_plecs)
-        for widget in getattr(self, "_ltspice_path_widgets", []):
-            widget.setVisible(not show_plecs)
+        if hasattr(self, "tabs_backend"):
+            current_page = self.tabs_backend.currentWidget()
+            if current_page is not None:
+                tab_bar_h = self.tabs_backend.tabBar().sizeHint().height()
+                frame_extra = 10
+                self.tabs_backend.setFixedHeight(current_page.sizeHint().height() + tab_bar_h + frame_extra)
         if hasattr(self, "btn_capture"):
             self.btn_capture.setEnabled(show_plecs)
         if hasattr(self, "spin_bode_cycles"):
-            self.spin_bode_cycles.setEnabled(show_plecs)
+            ltspice_mode_visible = not show_plecs
+            self.lbl_ltspice_bode_mode.setVisible(ltspice_mode_visible)
+            self.combo_ltspice_bode_mode.setVisible(ltspice_mode_visible)
+            cycles_needed = show_plecs or self._selected_ltspice_bode_mode() != "ac"
+            self.spin_bode_cycles.setEnabled(cycles_needed)
             self.spin_bode_dense_points.setEnabled(True)
         backend_label = "PLECS" if show_plecs else "LTspice"
         self._update_status_panel(backend=f"{backend_label} selected")
@@ -1246,6 +1308,8 @@ class BuckTunerGui(QMainWindow):
         cfg.ltspice_asc_model = self.edit_ltspice_asc.text().strip()
         cfg.ltspice_netlist_model = self.edit_ltspice_net.text().strip()
         cfg.ltspice_bode_netlist_model = self.edit_ltspice_bode.text().strip()
+        cfg.ltspice_bode_ac_netlist_model = self.edit_ltspice_bode_ac.text().strip()
+        cfg.ltspice_bode_mode = self._selected_ltspice_bode_mode()
         cfg.target_overshoot = self.spin_tgt_os.value()
         cfg.target_undershoot = self.spin_tgt_us.value()
         cfg.max_oscillations = int(self.spin_max_osc.value())
@@ -1429,11 +1493,12 @@ class BuckTunerGui(QMainWindow):
         for widget in widgets:
             widget.valueChanged.connect(self._queue_model_sync)
         self.chk_run_bode.toggled.connect(self._queue_model_sync)
-        self.combo_backend.currentIndexChanged.connect(self._queue_model_sync)
+        self.tabs_backend.currentChanged.connect(self._queue_model_sync)
+        self.combo_ltspice_bode_mode.currentIndexChanged.connect(self._queue_model_sync)
         for edit in (
             self.edit_plecs_model, self.edit_plecs_exe,
             self.edit_ltspice_exe, self.edit_ltspice_asc,
-            self.edit_ltspice_net, self.edit_ltspice_bode,
+            self.edit_ltspice_net, self.edit_ltspice_bode, self.edit_ltspice_bode_ac,
         ):
             edit.textChanged.connect(self._queue_model_sync)
         self.spin_wc.valueChanged.connect(self._set_pid_dirty)
@@ -1613,13 +1678,16 @@ class BuckTunerGui(QMainWindow):
         cfg = TuningConfig()
         comp = CompensatorDesign()
         ref_Kp, ref_Ki, ref_Kd, ref_Kf = comp.compute(cfg.wc_initial, cfg.phi_m_initial)
-        self.combo_backend.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
+        self.tabs_backend.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
         self.edit_plecs_model.setText(cfg.plecs_model)
         self.edit_plecs_exe.setText(cfg.plecs_exe)
         self.edit_ltspice_exe.setText(cfg.ltspice_exe)
         self.edit_ltspice_asc.setText(cfg.ltspice_asc_model)
         self.edit_ltspice_net.setText(cfg.ltspice_netlist_model)
         self.edit_ltspice_bode.setText(cfg.ltspice_bode_netlist_model)
+        self.edit_ltspice_bode_ac.setText(cfg.ltspice_bode_ac_netlist_model)
+        mode = str(getattr(cfg, "ltspice_bode_mode", "ac") or "ac").lower()
+        self.combo_ltspice_bode_mode.setCurrentIndex(1 if mode in ("switching", "switching_fra", "fra", "transient") else 0)
         self.spin_kp.setValue(ref_Kp)
         self.spin_ki.setValue(ref_Ki)
         self.spin_kd.setValue(ref_Kd)
@@ -1876,11 +1944,11 @@ class BuckTunerGui(QMainWindow):
         self.btn_pause.setEnabled(running)
         self.btn_resume.setEnabled(False)
         self.btn_stop.setEnabled(running)
-        self.combo_backend.setEnabled(not running)
+        self.tabs_backend.setEnabled(not running)
         for edit in (
             self.edit_plecs_model, self.edit_plecs_exe,
             self.edit_ltspice_exe, self.edit_ltspice_asc,
-            self.edit_ltspice_net, self.edit_ltspice_bode,
+            self.edit_ltspice_net, self.edit_ltspice_bode, self.edit_ltspice_bode_ac,
         ):
             edit.setReadOnly(running)
         self.spin_kp.setReadOnly(running)
@@ -1888,6 +1956,7 @@ class BuckTunerGui(QMainWindow):
         self.spin_kd.setReadOnly(running)
         self.spin_kf.setReadOnly(running)
         self.chk_run_bode.setEnabled(not running)
+        self.combo_ltspice_bode_mode.setEnabled(not running)
         self.spin_bode_f_start.setReadOnly(running)
         self.spin_bode_f_stop.setReadOnly(running)
         self.spin_bode_cycles.setReadOnly(running)

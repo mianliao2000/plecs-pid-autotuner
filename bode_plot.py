@@ -197,6 +197,18 @@ def _plecs_peak_dense_window(start_hz: float, stop_hz: float) -> Optional[Tuple[
     return lo, hi
 
 
+def _logspace_frequency_points(start_hz: float, stop_hz: float, num_points: int) -> List[float]:
+    if stop_hz <= start_hz:
+        return [start_hz]
+    num_points = max(2, int(num_points))
+    log_start = math.log10(start_hz)
+    log_stop = math.log10(stop_hz)
+    return [
+        10.0 ** (log_start + (log_stop - log_start) * i / (num_points - 1))
+        for i in range(num_points)
+    ]
+
+
 def interpolate_x_at_y(x1: float, y1: float, x2: float, y2: float, y_target: float) -> float:
     if y2 == y1:
         return x1
@@ -309,6 +321,134 @@ def run_loop_gain_analysis(
                 pass
 
 
+def _bode_from_ltspice_response(
+    freq_hz: List[float],
+    response_vals: List[complex],
+    elapsed_s: float,
+    coarse_elapsed_s: float,
+    dense_elapsed_s: float,
+    freq_start_hz: float,
+    freq_stop_hz: float,
+) -> BodeResult:
+    mag_db = [20.0 * math.log10(max(abs(h), 1e-18)) for h in response_vals]
+    phase_deg = unwrap_phase_deg([math.degrees(math.atan2(h.imag, h.real)) for h in response_vals])
+    real_vals = [h.real for h in response_vals]
+    imag_vals = [h.imag for h in response_vals]
+    return BodeResult(
+        freq_hz=freq_hz,
+        mag_db=mag_db,
+        phase_deg=phase_deg,
+        real_vals=real_vals,
+        imag_vals=imag_vals,
+        metrics=compute_metrics(freq_hz, mag_db, phase_deg),
+        elapsed_s=elapsed_s,
+        coarse_elapsed_s=coarse_elapsed_s,
+        dense_elapsed_s=dense_elapsed_s,
+        requested_start_hz=freq_start_hz,
+        requested_stop_hz=freq_stop_hz,
+    )
+
+
+def run_ltspice_ac_loop_gain_analysis(
+    config: TuningConfig,
+    Kp: float,
+    Ki: float,
+    Kd: float,
+    Kf: float,
+    freq_start_hz: float,
+    freq_stop_hz: float,
+    num_points: int,
+    dense_num_points: Optional[int] = None,
+) -> BodeResult:
+    """Run LTspice averaged-model .ac loop-gain sweep and return Bode data."""
+    runner = LtspiceSimulationRunner(config)
+
+    dense_points = int(dense_num_points if dense_num_points is not None else 0)
+    coarse_freq_hz, coarse_response, coarse_elapsed = runner.run_ac(
+        Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points
+    )
+
+    responses: Dict[float, Tuple[float, complex]] = {}
+    for freq, response in zip(coarse_freq_hz, coarse_response):
+        responses[round(freq, 9)] = (freq, response)
+
+    dense_elapsed = 0.0
+    peak_window = _plecs_peak_dense_window(freq_start_hz, freq_stop_hz) if dense_points >= 5 else None
+    if peak_window is not None:
+        dense_freq_hz, dense_response, dense_elapsed = runner.run_ac(
+            Kp, Ki, Kd, Kf, peak_window[0], peak_window[1], dense_points
+        )
+        for freq, response in zip(dense_freq_hz, dense_response):
+            responses[round(freq, 9)] = (freq, response)
+
+    rows = sorted(responses.values(), key=lambda row: row[0])
+    freq_hz = [row[0] for row in rows]
+    response_vals = [row[1] for row in rows]
+    return _bode_from_ltspice_response(
+        freq_hz,
+        response_vals,
+        coarse_elapsed + dense_elapsed,
+        coarse_elapsed,
+        dense_elapsed,
+        freq_start_hz,
+        freq_stop_hz,
+    )
+
+
+def run_ltspice_switching_loop_gain_analysis(
+    config: TuningConfig,
+    Kp: float,
+    Ki: float,
+    Kd: float,
+    Kf: float,
+    freq_start_hz: float,
+    freq_stop_hz: float,
+    num_points: int,
+    dense_num_points: Optional[int] = None,
+) -> BodeResult:
+    """Run switching-transient LTspice loop-gain extraction and return Bode data."""
+    runner = LtspiceSimulationRunner(config)
+
+    coarse_freqs = _logspace_frequency_points(freq_start_hz, freq_stop_hz, num_points)
+    dense_points = int(dense_num_points if dense_num_points is not None else 0)
+    dense_freqs: List[float] = []
+    peak_window = _plecs_peak_dense_window(freq_start_hz, freq_stop_hz) if dense_points >= 5 else None
+    if peak_window is not None:
+        dense_freqs = _logspace_frequency_points(peak_window[0], peak_window[1], dense_points)
+
+    extraction_cycles = int(getattr(config, "bode_extraction_cycles", 30))
+    responses: Dict[float, Tuple[float, complex]] = {}
+    coarse_elapsed = 0.0
+    dense_elapsed = 0.0
+
+    for freq in coarse_freqs:
+        response, elapsed = runner.run_switching_loop_gain_point(
+            freq, Kp, Ki, Kd, Kf, extraction_cycles
+        )
+        coarse_elapsed += elapsed
+        responses[round(freq, 9)] = (freq, response)
+
+    for freq in dense_freqs:
+        response, elapsed = runner.run_switching_loop_gain_point(
+            freq, Kp, Ki, Kd, Kf, extraction_cycles
+        )
+        dense_elapsed += elapsed
+        responses[round(freq, 9)] = (freq, response)
+
+    rows = sorted(responses.values(), key=lambda row: row[0])
+    freq_hz = [row[0] for row in rows]
+    response_vals = [row[1] for row in rows]
+    return _bode_from_ltspice_response(
+        freq_hz=freq_hz,
+        response_vals=response_vals,
+        elapsed_s=coarse_elapsed + dense_elapsed,
+        coarse_elapsed_s=coarse_elapsed,
+        dense_elapsed_s=dense_elapsed,
+        freq_start_hz=freq_start_hz,
+        freq_stop_hz=freq_stop_hz,
+    )
+
+
 def run_ltspice_loop_gain_analysis(
     config: TuningConfig,
     Kp: float,
@@ -320,68 +460,15 @@ def run_ltspice_loop_gain_analysis(
     num_points: int,
     dense_num_points: Optional[int] = None,
 ) -> BodeResult:
-    """Run the LTspice averaged loop-gain companion netlist and return Bode data."""
-    runner = LtspiceSimulationRunner(config)
-
-    def make_result(freq_hz: List[float], response: List[complex], elapsed_s: float, *, coarse: bool) -> BodeResult:
-        mag_db = [20.0 * math.log10(max(abs(h), 1e-18)) for h in response]
-        phase_deg = unwrap_phase_deg([math.degrees(math.atan2(h.imag, h.real)) for h in response])
-        real_vals = [h.real for h in response]
-        imag_vals = [h.imag for h in response]
-        return BodeResult(
-            freq_hz=freq_hz,
-            mag_db=mag_db,
-            phase_deg=phase_deg,
-            real_vals=real_vals,
-            imag_vals=imag_vals,
-            metrics=compute_metrics(freq_hz, mag_db, phase_deg),
-            elapsed_s=elapsed_s,
-            coarse_elapsed_s=elapsed_s if coarse else 0.0,
-            dense_elapsed_s=0.0 if coarse else elapsed_s,
-            requested_start_hz=freq_start_hz,
-            requested_stop_hz=freq_stop_hz,
+    """Run the selected LTspice Bode mode."""
+    mode = str(getattr(config, "ltspice_bode_mode", "ac") or "ac").strip().lower()
+    if mode in ("switching", "switching_fra", "fra", "transient"):
+        return run_ltspice_switching_loop_gain_analysis(
+            config, Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points, dense_num_points
         )
-
-    freq_hz, response, elapsed_s = runner.run_ac(
-        Kp,
-        Ki,
-        Kd,
-        Kf,
-        freq_start_hz,
-        freq_stop_hz,
-        num_points,
+    return run_ltspice_ac_loop_gain_analysis(
+        config, Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points, dense_num_points
     )
-    coarse = make_result(freq_hz, response, elapsed_s, coarse=True)
-
-    dense_points = int(dense_num_points if dense_num_points is not None else 0)
-    if dense_points < 5 or len(coarse.freq_hz) < 3:
-        return coarse
-
-    windows = []
-    peak_window = _plecs_peak_dense_window(freq_start_hz, freq_stop_hz)
-    if peak_window is not None:
-        windows.append(peak_window)
-
-    dense_results: List[BodeResult] = []
-    for lo, hi in _merge_windows(windows):
-        ltspice_dense_points = max(dense_points, dense_points * 4)
-        points_per_decade = _points_per_decade_for_window(ltspice_dense_points, lo, hi)
-        dense_freq, dense_response, dense_elapsed = runner.run_ac(
-            Kp,
-            Ki,
-            Kd,
-            Kf,
-            lo,
-            hi,
-            points_per_decade,
-        )
-        dense_results.append(make_result(dense_freq, dense_response, dense_elapsed, coarse=False))
-
-    if not dense_results:
-        return coarse
-
-    merged = _merge_bode_results(coarse, *dense_results)
-    return _slice_bode_result(merged, freq_start_hz, freq_stop_hz)
 
 
 def save_bode_csv(path: Path, bode: BodeResult) -> None:

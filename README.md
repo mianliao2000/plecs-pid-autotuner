@@ -314,7 +314,10 @@ Uses an adaptive band derived from the ripple amplitude at the tail of the analy
 
 ### Bode Analysis
 
-After each time-domain simulation, a loop-gain frequency response can optionally be extracted. PLECS uses the built-in analysis tool; LTspice uses the averaged AC companion netlist.
+After each time-domain simulation, a loop-gain frequency response can optionally be extracted. PLECS uses the built-in analysis tool. LTspice has two GUI-selectable Bode modes:
+
+- **AC sweep**: runs LTspice `.ac` on the averaged small-signal companion netlist. This is fast and is the default LTspice Bode mode.
+- **Switching FRA**: runs the real switching companion circuit in transient mode for each frequency point. This is much slower, but verifies the switching model directly.
 
 1. The 1A load pulse generator is temporarily commented out (steady-state operating point)
 2. A coarse sweep is run across the configured range
@@ -324,15 +327,19 @@ After each time-domain simulation, a loop-gain frequency response can optionally
    - **PM** — phase margin (180° + phase at fc)
    - **GM** — gain margin (–magnitude at –180° phase crossing)
 
-For LTspice, `Coarse Num Points` controls the full-range averaged AC sweep, while
-`Dense Num Points` controls the `3 kHz` to `20 kHz` dense sweep. The LTspice
-backend internally converts these values to `.ac dec` points-per-decade and
-uses extra density in the dense range so the resonant peak has enough samples.
-Because this is an averaged Laplace AC companion model, changing point counts
-usually changes the plotted point density more than the total analysis time;
-the Bode plot annotation and log show the final merged point count. Point-count
-changes apply to the next Bode run and do not recompute already stored
-iteration history.
+For LTspice AC sweep, `Coarse Num Points` and `Dense Num Points` are passed to
+LTspice `.ac dec` as points per decade. `Extraction Cycles` is ignored.
+
+For LTspice Switching FRA, `Coarse Num Points` controls the full-range transient
+sweep, while `Dense Num Points` controls the `3 kHz` to `20 kHz` dense sweep. At
+each frequency the backend injects a small sinusoidal perturbation into the
+voltage reference of the switching circuit, fits the final cycles of `Vout`,
+computes the closed-loop response `H = Vout/Vref`, then converts it to loop gain
+with `T = H/(1-H)`. `Extraction Cycles` and point counts strongly affect runtime
+in this mode.
+
+Point-count changes apply to the next Bode run and do not recompute already
+stored iteration history.
 
 ---
 
@@ -348,6 +355,9 @@ python gui.py
 +--------------------------------------------+------------------------------------------+
 |  Left panel (scrollable)                   |  Right panel                             |
 |                                            |                                          |
+|  [PLECS] [LTspice] backend tabs            |                                          |
+|    Backend-specific model paths            |                                          |
+|                                            |                                          |
 |  Circuit screenshot                        |  [Waveform canvas]  [Bode canvas]        |
 |                                            |   Live Vout trace    Magnitude (dB)      |
 |  PID Parameters                            |   Ghost traces       Phase (deg)         |
@@ -362,6 +372,7 @@ python gui.py
 |                                            |
 |  Bode Analysis                             |
 |    [x] Run bode plot analysis              |
+|    LTspice mode: AC sweep / Switching FRA  |
 |    Start f / Stop f / Extraction Cycles   |
 |    Coarse Points / Dense Points           |
 |                                            |
@@ -380,7 +391,7 @@ python gui.py
 
 ### Auto-Tune
 
-Runs the full `GridRefinePidTuner` search autonomously for up to `max_iterations` iterations. On completion, the GUI switches to display the best iteration found (lowest OS²+US²). PID spinboxes become read-only during the run.
+Runs the full `GridRefinePidTuner` search autonomously for up to `max_iterations` iterations. On completion, the GUI switches to the passing iteration with the lowest OS+US. If no iteration passes, it falls back to the best failed result by the internal score. PID spinboxes become read-only during the run.
 
 ### Run Single Iteration
 
@@ -443,7 +454,9 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 | `ltspice_exe` | Auto-detected ADI path | Path to LTspice executable |
 | `ltspice_asc_model` | `ltspice/synchronous_buck.asc` | LTspice companion schematic |
 | `ltspice_netlist_model` | `ltspice/synchronous_buck_tran.cir` | LTspice switching transient netlist |
-| `ltspice_bode_netlist_model` | `ltspice/synchronous_buck_bode.cir` | LTspice averaged AC Bode netlist |
+| `ltspice_bode_netlist_model` | `ltspice/synchronous_buck_bode.cir` | LTspice switching-FRA Bode netlist |
+| `ltspice_bode_ac_netlist_model` | `ltspice/synchronous_buck_bode_ac.cir` | LTspice averaged AC Bode netlist |
+| `ltspice_bode_mode` | `ac` | LTspice-only Bode mode: `ac` or `switching` |
 | `rpc_url` | `http://127.0.0.1:1080/RPC2` | PLECS XML-RPC endpoint |
 | `results_dir` | `results/` | Root folder for run subfolders |
 | `work_dir` | `plecs_tuning_work/` | Disposable PLECS working model copies |
@@ -471,7 +484,7 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 
 The default starting point (wc = 15 kHz, phi_m = 30°) is intentionally poor — near resonance with low damping — to demonstrate the tuner's ability to recover. A good nominal starting point would be wc = 25 kHz, phi_m = 60°.
 
-The path-like defaults can also be overridden with environment variables: `SIM_BACKEND`, `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, `PLECS_WORK_DIR`, `LTSPICE_EXE`, `LTSPICE_ASC_MODEL`, `LTSPICE_NETLIST_MODEL`, `LTSPICE_BODE_NETLIST_MODEL`, and `LTSPICE_WORK_DIR`.
+The path-like defaults can also be overridden with environment variables: `SIM_BACKEND`, `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, `PLECS_WORK_DIR`, `LTSPICE_EXE`, `LTSPICE_ASC_MODEL`, `LTSPICE_NETLIST_MODEL`, `LTSPICE_BODE_NETLIST_MODEL`, `LTSPICE_BODE_AC_NETLIST_MODEL`, `LTSPICE_BODE_MODE`, and `LTSPICE_WORK_DIR`.
 
 ---
 
