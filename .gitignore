@@ -12,6 +12,12 @@ venv/
 plecs_tuning_work/
 *.plecs.autosave
 
+# LTspice runtime artifacts
+ltspice_tuning_work/
+*.raw
+*.log
+*.net
+
 # Generated outputs
 results/
 

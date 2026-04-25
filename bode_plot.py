@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import xmlrpc.client as x
 
 from auto_tune import PlecsModelEditor, TuningConfig
+from ltspice_backend import LtspiceSimulationRunner
 
 
 @dataclass
@@ -56,6 +57,24 @@ def format_frequency(freq_hz: Optional[float]) -> str:
     return f"{freq_hz:.0f} Hz"
 
 
+def unwrap_phase_deg(phase_deg: List[float]) -> List[float]:
+    """Return a continuous phase trace instead of atan2's [-180, 180] wrap."""
+    if not phase_deg:
+        return []
+    unwrapped = [phase_deg[0]]
+    offset = 0.0
+    prev_raw = phase_deg[0]
+    for raw in phase_deg[1:]:
+        delta = raw - prev_raw
+        if delta > 180.0:
+            offset -= 360.0
+        elif delta < -180.0:
+            offset += 360.0
+        unwrapped.append(raw + offset)
+        prev_raw = raw
+    return unwrapped
+
+
 def _run_frequency_response(server, model_id: str, analysis_name: str) -> BodeResult:
     t0 = time.perf_counter()
     res = server.plecs.analyze(model_id, analysis_name)
@@ -66,7 +85,7 @@ def _run_frequency_response(server, model_id: str, analysis_name: str) -> BodeRe
     imag_vals = list(res["Gi"][0])
     response = [complex(re, im) for re, im in zip(real_vals, imag_vals)]
     mag_db = [20.0 * math.log10(max(abs(h), 1e-18)) for h in response]
-    phase_deg = [math.degrees(math.atan2(h.imag, h.real)) for h in response]
+    phase_deg = unwrap_phase_deg([math.degrees(math.atan2(h.imag, h.real)) for h in response])
     metrics = compute_metrics(freq_hz, mag_db, phase_deg)
     return BodeResult(
         freq_hz=freq_hz,
@@ -100,9 +119,12 @@ def _merge_bode_results(*bodes: BodeResult) -> BodeResult:
     rows = sorted(merged.values(), key=lambda row: row[0])
     freq_hz = [row[0] for row in rows]
     mag_db = [row[1] for row in rows]
-    phase_deg = [row[2] for row in rows]
     real_vals = [row[3] for row in rows]
     imag_vals = [row[4] for row in rows]
+    phase_deg = unwrap_phase_deg([
+        math.degrees(math.atan2(im, re))
+        for re, im in zip(real_vals, imag_vals)
+    ])
     return BodeResult(
         freq_hz=freq_hz,
         mag_db=mag_db,
@@ -147,6 +169,32 @@ def _slice_bode_result(bode: BodeResult, freq_start_hz: float, freq_stop_hz: flo
         requested_start_hz=freq_start_hz,
         requested_stop_hz=freq_stop_hz,
     )
+
+
+def _merge_windows(windows: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    if not windows:
+        return []
+    merged: List[Tuple[float, float]] = []
+    for lo, hi in sorted(windows):
+        if not merged or lo > merged[-1][1] * 1.05:
+            merged.append((lo, hi))
+        else:
+            prev_lo, prev_hi = merged[-1]
+            merged[-1] = (prev_lo, max(prev_hi, hi))
+    return merged
+
+
+def _points_per_decade_for_window(total_points: int, lo_hz: float, hi_hz: float) -> int:
+    decades = max(1e-6, math.log10(hi_hz / lo_hz))
+    return max(5, math.ceil(total_points / decades))
+
+
+def _plecs_peak_dense_window(start_hz: float, stop_hz: float) -> Optional[Tuple[float, float]]:
+    lo = max(start_hz, 3e3)
+    hi = min(stop_hz, 2e4)
+    if hi <= lo:
+        return None
+    return lo, hi
 
 
 def interpolate_x_at_y(x1: float, y1: float, x2: float, y2: float, y_target: float) -> float:
@@ -261,6 +309,81 @@ def run_loop_gain_analysis(
                 pass
 
 
+def run_ltspice_loop_gain_analysis(
+    config: TuningConfig,
+    Kp: float,
+    Ki: float,
+    Kd: float,
+    Kf: float,
+    freq_start_hz: float,
+    freq_stop_hz: float,
+    num_points: int,
+    dense_num_points: Optional[int] = None,
+) -> BodeResult:
+    """Run the LTspice averaged loop-gain companion netlist and return Bode data."""
+    runner = LtspiceSimulationRunner(config)
+
+    def make_result(freq_hz: List[float], response: List[complex], elapsed_s: float, *, coarse: bool) -> BodeResult:
+        mag_db = [20.0 * math.log10(max(abs(h), 1e-18)) for h in response]
+        phase_deg = unwrap_phase_deg([math.degrees(math.atan2(h.imag, h.real)) for h in response])
+        real_vals = [h.real for h in response]
+        imag_vals = [h.imag for h in response]
+        return BodeResult(
+            freq_hz=freq_hz,
+            mag_db=mag_db,
+            phase_deg=phase_deg,
+            real_vals=real_vals,
+            imag_vals=imag_vals,
+            metrics=compute_metrics(freq_hz, mag_db, phase_deg),
+            elapsed_s=elapsed_s,
+            coarse_elapsed_s=elapsed_s if coarse else 0.0,
+            dense_elapsed_s=0.0 if coarse else elapsed_s,
+            requested_start_hz=freq_start_hz,
+            requested_stop_hz=freq_stop_hz,
+        )
+
+    freq_hz, response, elapsed_s = runner.run_ac(
+        Kp,
+        Ki,
+        Kd,
+        Kf,
+        freq_start_hz,
+        freq_stop_hz,
+        num_points,
+    )
+    coarse = make_result(freq_hz, response, elapsed_s, coarse=True)
+
+    dense_points = int(dense_num_points if dense_num_points is not None else 0)
+    if dense_points < 5 or len(coarse.freq_hz) < 3:
+        return coarse
+
+    windows = []
+    peak_window = _plecs_peak_dense_window(freq_start_hz, freq_stop_hz)
+    if peak_window is not None:
+        windows.append(peak_window)
+
+    dense_results: List[BodeResult] = []
+    for lo, hi in _merge_windows(windows):
+        ltspice_dense_points = max(dense_points, dense_points * 4)
+        points_per_decade = _points_per_decade_for_window(ltspice_dense_points, lo, hi)
+        dense_freq, dense_response, dense_elapsed = runner.run_ac(
+            Kp,
+            Ki,
+            Kd,
+            Kf,
+            lo,
+            hi,
+            points_per_decade,
+        )
+        dense_results.append(make_result(dense_freq, dense_response, dense_elapsed, coarse=False))
+
+    if not dense_results:
+        return coarse
+
+    merged = _merge_bode_results(coarse, *dense_results)
+    return _slice_bode_result(merged, freq_start_hz, freq_stop_hz)
+
+
 def save_bode_csv(path: Path, bode: BodeResult) -> None:
     with path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
@@ -349,6 +472,7 @@ def draw_bode_axes(ax_mag, ax_phase, bode: Optional[BodeResult], title: str = "L
     ]
     if bode.elapsed_s > 0:
         summary.append(f"analysis = {bode.elapsed_s:.1f} s")
+    summary.append(f"points = {len(bode.freq_hz)}")
     ax_mag.text(
         0.98,
         0.98,

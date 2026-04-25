@@ -12,6 +12,7 @@ import math
 import threading
 import time
 import shutil
+import os
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 
@@ -19,7 +20,8 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGroupBox, QLabel, QPushButton, QDoubleSpinBox, QSpinBox, QCheckBox,
     QTextEdit, QSplitter, QFileDialog, QMessageBox, QLineEdit, QToolButton,
-    QProgressBar, QSizePolicy, QScrollArea
+    QProgressBar, QSizePolicy, QScrollArea, QGridLayout, QTableWidget,
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QComboBox
 )
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, Qt, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QPalette
@@ -35,13 +37,58 @@ from auto_tune import (
     PlecsRpc, PidTuner, ScopeCsvParser, ResponseAnalyzer, select_best_result
 )
 from analyze import plot_animation
-from bode_plot import BodeResult, draw_bode_axes, run_loop_gain_analysis
+from bode_plot import BodeResult, draw_bode_axes, run_loop_gain_analysis, run_ltspice_loop_gain_analysis
 from iteration_export import (
     copy_best_frame,
     save_iteration_frame,
     write_bode_workbook,
     write_time_workbook,
 )
+from ltspice_backend import import_pyltspice
+
+
+def validate_config_values(config: TuningConfig) -> List[str]:
+    """Return user-facing validation errors before starting a run."""
+    errors: List[str] = []
+    backend = config.backend
+    if backend == "plecs":
+        if not Path(config.plecs_model).exists():
+            errors.append(f"PLECS model not found: {config.plecs_model}")
+        if config.plecs_exe and not Path(config.plecs_exe).exists():
+            errors.append(f"PLECS executable not found: {config.plecs_exe}")
+    elif backend == "ltspice":
+        if not config.ltspice_exe or not Path(config.ltspice_exe).exists():
+            errors.append(
+                "LTspice executable not found. Set LTSPICE_EXE or choose the installed LTspice.exe in the GUI."
+            )
+        for label, path in (
+            ("LTspice schematic", config.ltspice_asc_model),
+            ("LTspice transient netlist", config.ltspice_netlist_model),
+            ("LTspice Bode netlist", config.ltspice_bode_netlist_model),
+        ):
+            if not Path(path).exists():
+                errors.append(f"{label} not found: {path}")
+        try:
+            import_pyltspice()
+        except ImportError as exc:
+            errors.append(str(exc))
+    if config.max_iterations < 1:
+        errors.append("Max Iter must be at least 1.")
+    if config.target_overshoot < 0 or config.target_undershoot < 0:
+        errors.append("Overshoot and undershoot targets must be non-negative.")
+    if config.target_settling_time <= 0:
+        errors.append("Settling-time target must be positive.")
+    if config.run_bode_analysis:
+        if config.bode_freq_stop_hz <= config.bode_freq_start_hz:
+            errors.append("Bode Stop f (Hz) must be greater than Start f (Hz).")
+        if config.bode_coarse_num_points < 5:
+            errors.append("Bode point count must be at least 5.")
+        if backend == "plecs":
+            if config.bode_dense_num_points < 5:
+                errors.append("Dense Bode point count must be at least 5.")
+            if config.bode_extraction_cycles < 1:
+                errors.append("Bode extraction cycles must be at least 1.")
+    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +97,10 @@ from iteration_export import (
 
 class WaveformCanvas(FigureCanvasQTAgg):
     """Live waveform plot with dark theme, ghost traces, and OS/US bands."""
+
+    MAX_GHOST_TRACES = 10
+    GHOST_RENDER_POINTS = 500
+    CURRENT_RENDER_POINTS = 2500
 
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(9, 4), dpi=90)
@@ -60,21 +111,38 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.history: List[dict] = []  # [{result, time, vout}, ...]
         self._draw_empty()
 
+    def _apply_layout(self) -> None:
+        width_px, height_px = self.fig.get_size_inches() * self.fig.dpi
+        left = max(0.055, 58.0 / max(width_px, 1.0))
+        right = 1.0 - max(0.010, 12.0 / max(width_px, 1.0))
+        bottom = max(0.105, 42.0 / max(height_px, 1.0))
+        top = 1.0 - max(0.105, 48.0 / max(height_px, 1.0))
+        self.fig.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
+
     @staticmethod
-    def _moving_average(values: List[float], window: int = 50) -> List[float]:
+    def _moving_average(values: List[float], window: int = 10) -> List[float]:
         if not values:
             return []
         window = max(1, min(window, len(values)))
+        cumsum = [0.0]
+        for value in values:
+            cumsum.append(cumsum[-1] + value)
+        half = window // 2
         out: List[float] = []
-        running = 0.0
-        buf: List[float] = []
-        for val in values:
-            buf.append(val)
-            running += val
-            if len(buf) > window:
-                running -= buf.pop(0)
-            out.append(running / len(buf))
+        for i in range(len(values)):
+            lo = max(0, i - half)
+            hi = min(len(values), i + half + 1)
+            out.append((cumsum[hi] - cumsum[lo]) / (hi - lo))
         return out
+
+    @staticmethod
+    def _thin_xy(time_vals: List[float], y_vals: List[float], max_points: int) -> Tuple[List[float], List[float]]:
+        n = min(len(time_vals), len(y_vals))
+        if n <= max_points or max_points < 2:
+            return [time_vals[i] * 1000.0 for i in range(n)], y_vals[:n]
+        last_idx = n - 1
+        idxs = [round(i * last_idx / (max_points - 1)) for i in range(max_points)]
+        return [time_vals[i] * 1000.0 for i in idxs], [y_vals[i] for i in idxs]
 
     def _draw_empty(self, target_os: float = 5.0, target_us: float = 5.0):
         v_tgt = 5.0
@@ -97,7 +165,7 @@ class WaveformCanvas(FigureCanvasQTAgg):
         for sp in ax.spines.values():
             sp.set_edgecolor('#2a2a2e')
         ax.grid(True, alpha=0.2, color='#3a3a40')
-        self.fig.tight_layout()
+        self._apply_layout()
         self.draw()
 
     def update_plot(self, history: List[dict], current_idx: int,
@@ -118,39 +186,49 @@ class WaveformCanvas(FigureCanvasQTAgg):
         ax.axhline(y=v_us, color='#e0a030', linestyle='--', lw=0.8, alpha=0.6)
         ax.axhline(y=v_tgt, color='#707076', linestyle=':', lw=1.0, alpha=0.7)
 
-        # Ghost traces
-        for i in range(current_idx):
+        # Ghost traces are useful context, but plotting every LTspice point from
+        # every prior iteration makes row selection feel sluggish.
+        ghost_start = max(0, current_idx - self.MAX_GHOST_TRACES)
+        for i in range(ghost_start, current_idx):
             entry = history[i]
-            t_ms = [t * 1000 for t in entry['time']]
+            t_ms, ghost_vout = self._thin_xy(
+                entry['time'],
+                entry['vout'],
+                self.GHOST_RENDER_POINTS,
+            )
             gc = '#00d4aa' if entry['result'].status == 'PASS' else '#5b8af0'
-            ax.plot(t_ms, entry['vout'], color=gc, lw=0.6, alpha=0.20)
+            ax.plot(t_ms, ghost_vout, color=gc, lw=0.6, alpha=0.20)
 
         # Current waveform
         cur = history[current_idx]
         r = cur['result']
         sc = '#00d4aa' if r.status == 'PASS' else '#f05050'
-        t_ms = [t * 1000 for t in cur['time']]
-        vout = cur['vout']
+        cur_time = cur['time']
+        cur_vout = cur['vout']
+        vout_filt_full = self._moving_average(cur_vout, 10)
+        t_ms, vout = self._thin_xy(cur_time, cur_vout, self.CURRENT_RENDER_POINTS)
+        filt_t_ms, vout_filt = self._thin_xy(cur_time, vout_filt_full, self.CURRENT_RENDER_POINTS)
         ax.plot(t_ms, vout, color=sc, lw=2.0, label=f'Iter {r.iter_num} ({r.status})', zorder=5)
-        vout_filt = self._moving_average(vout, 50)
         ax.plot(
-            t_ms,
+            filt_t_ms,
             vout_filt,
             color='#7fb3ff',
             lw=2.4,
             alpha=1.0,
             linestyle='--',
             dashes=(6, 3),
-            label='50-sample moving average',
+            label='10-sample moving average',
             zorder=7,
         )
 
         # Peak / valley markers
-        if vout:
-            v_peak = max(vout)
-            v_valley = min(vout)
-            ax.scatter([t_ms[vout.index(v_peak)]], [v_peak], color='#f05050', s=50, zorder=6)
-            ax.scatter([t_ms[vout.index(v_valley)]], [v_valley], color='#e0a030', s=50, zorder=6)
+        if cur_vout:
+            v_peak = max(cur_vout)
+            v_valley = min(cur_vout)
+            peak_idx = cur_vout.index(v_peak)
+            valley_idx = cur_vout.index(v_valley)
+            ax.scatter([cur_time[peak_idx] * 1000.0], [v_peak], color='#f05050', s=50, zorder=6)
+            ax.scatter([cur_time[valley_idx] * 1000.0], [v_valley], color='#e0a030', s=50, zorder=6)
 
         ax.set_xlim(min(t_ms), max(t_ms))
         ax.set_ylim(4.4, 5.6)
@@ -161,15 +239,15 @@ class WaveformCanvas(FigureCanvasQTAgg):
             f"Kd={r.Kd:.2e}  Kf={r.Kf:.0f}\n"
             f"OS={r.overshoot:.1f}%  US={r.undershoot:.1f}%  "
             f"Osc={r.osc_count}  Ts={r.settling_time*1000:.3f} ms  ->  {r.status}",
-            color=sc, fontsize=10, fontweight='bold')
+            color=sc, fontsize=9, fontweight='bold', pad=7)
         ax.tick_params(colors='#9a9aa0')
         for sp in ax.spines.values():
             sp.set_edgecolor('#2a2a2e')
         ax.legend(loc='upper right', facecolor='#141416', edgecolor='#2a2a2e',
                   labelcolor='#9a9aa0', fontsize=8)
         ax.grid(True, alpha=0.2, color='#3a3a40')
-        self.fig.tight_layout()
-        self.draw()
+        self._apply_layout()
+        self.draw_idle()
 
 
 class BodeCanvas(FigureCanvasQTAgg):
@@ -183,9 +261,18 @@ class BodeCanvas(FigureCanvasQTAgg):
         self.setParent(parent)
         self._draw_empty()
 
+    def _apply_layout(self) -> None:
+        width_px, height_px = self.fig.get_size_inches() * self.fig.dpi
+        left = max(0.115, 58.0 / max(width_px, 1.0))
+        right = 1.0 - max(0.012, 10.0 / max(width_px, 1.0))
+        bottom = max(0.105, 38.0 / max(height_px, 1.0))
+        top = 1.0 - max(0.105, 42.0 / max(height_px, 1.0))
+        hspace = max(0.12, min(0.22, 30.0 / max(height_px, 1.0)))
+        self.fig.subplots_adjust(left=left, right=right, bottom=bottom, top=top, hspace=hspace)
+
     def _draw_empty(self):
         draw_bode_axes(self.ax_mag, self.ax_phase, None, "Loop Gain Bode")
-        self.fig.tight_layout()
+        self._apply_layout()
         self.draw()
 
     def update_bode(self, bode: Optional[BodeResult], iter_num: Optional[int] = None):
@@ -193,8 +280,8 @@ class BodeCanvas(FigureCanvasQTAgg):
         if iter_num is not None:
             title = f"Loop Gain Bode\nIter {iter_num}"
         draw_bode_axes(self.ax_mag, self.ax_phase, bode, title)
-        self.fig.tight_layout()
-        self.draw()
+        self._apply_layout()
+        self.draw_idle()
 
 
 class MetricsCanvas(FigureCanvasQTAgg):
@@ -223,7 +310,11 @@ class MetricsCanvas(FigureCanvasQTAgg):
         self.fig.subplots_adjust(hspace=0.45)
         self.draw()
 
-    def update_metrics(self, results: List[TuningResult]):
+    def update_metrics(self, results: List[TuningResult],
+                       target_os: float = 5.0,
+                       target_us: float = 5.0,
+                       max_osc: int = 0,
+                       target_ts_ms: float = 0.1):
         if not results:
             return
         iters = [r.iter_num for r in results]
@@ -237,7 +328,10 @@ class MetricsCanvas(FigureCanvasQTAgg):
         ax.set_facecolor('#1c1c1f')
         ax.plot(iters, os_vals, color='#f05050', marker='o', label='OS%', ms=4, lw=1.2)
         ax.plot(iters, us_vals, color='#e0a030', marker='s', label='US%', ms=4, lw=1.2)
-        ax.axhline(y=5.0, color='#f05050', linestyle='--', alpha=0.5, lw=0.8)
+        ax.axhline(y=target_os, color='#f05050', linestyle='--', alpha=0.5, lw=0.8,
+                   label=f'OS target {target_os:.1f}%')
+        ax.axhline(y=target_us, color='#e0a030', linestyle=':', alpha=0.5, lw=0.8,
+                   label=f'US target {target_us:.1f}%')
         ax.set_xlabel('Iteration', color='#9a9aa0', fontsize=8)
         ax.set_ylabel('%', color='#9a9aa0', fontsize=8)
         ax.set_title('Overshoot / Undershoot', color='#9a9aa0', fontsize=9)
@@ -250,9 +344,9 @@ class MetricsCanvas(FigureCanvasQTAgg):
         ax2 = self.ax_osc
         ax2.clear()
         ax2.set_facecolor('#1c1c1f')
-        colors = ['#00d4aa' if o <= 2 else '#f05050' for o in osc_vals]
+        colors = ['#00d4aa' if o <= max_osc else '#f05050' for o in osc_vals]
         ax2.bar(iters, osc_vals, color=colors, width=0.8)
-        ax2.axhline(y=2, color='#707076', linestyle='--', lw=0.8)
+        ax2.axhline(y=max_osc, color='#707076', linestyle='--', lw=0.8)
         ax2.set_xlabel('Iteration', color='#9a9aa0', fontsize=8)
         ax2.set_ylabel('Count', color='#9a9aa0', fontsize=8)
         ax2.set_title('Oscillations', color='#9a9aa0', fontsize=9)
@@ -266,6 +360,7 @@ class MetricsCanvas(FigureCanvasQTAgg):
         ax3.clear()
         ax3.set_facecolor('#1c1c1f')
         ax3.plot(iters, ts_vals, color='#5b8af0', marker='D', ms=4, lw=1.2)
+        ax3.axhline(y=target_ts_ms, color='#707076', linestyle='--', lw=0.8)
         ax3.set_xlabel('Iteration', color='#9a9aa0', fontsize=8)
         ax3.set_ylabel('ms', color='#9a9aa0', fontsize=8)
         ax3.set_title('Settling Time', color='#9a9aa0', fontsize=9)
@@ -282,21 +377,25 @@ class MetricsCanvas(FigureCanvasQTAgg):
 class CollapsibleSection(QWidget):
     """Simple click-to-toggle section for dense control panels."""
 
-    def __init__(self, title: str, expanded: bool = True, parent=None):
+    def __init__(self, title: str, expanded: bool = True, parent=None, compact: bool = False):
         super().__init__(parent)
         self.toggle_button = QToolButton(self)
         self.toggle_button.setText(title)
         self.toggle_button.setCheckable(True)
         self.toggle_button.setChecked(expanded)
         self.toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toggle_button.setIconSize(QSize(8 if compact else 12, 8 if compact else 12))
+        self.toggle_button.setProperty("compact", compact)
+        if compact:
+            self.toggle_button.setFixedHeight(22)
         self.toggle_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
         self.toggle_button.clicked.connect(self._on_toggled)
 
         self.content = QWidget(self)
         self.content.setVisible(expanded)
         self.content_layout = QVBoxLayout(self.content)
-        self.content_layout.setContentsMargins(10, 4, 6, 6)
-        self.content_layout.setSpacing(4)
+        self.content_layout.setContentsMargins(8 if compact else 10, 3 if compact else 4, 6, 5 if compact else 6)
+        self.content_layout.setSpacing(3 if compact else 4)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -320,6 +419,7 @@ class TunerWorker(QObject):
     tuning_finished = pyqtSignal(bool)       # True = PASS found
     log_message = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
+    status_changed = pyqtSignal(object)
 
     def __init__(self, config: TuningConfig):
         super().__init__()
@@ -335,9 +435,30 @@ class TunerWorker(QObject):
         self._waveform_store: Dict[int, Dict] = {}
         self._bode_store: Dict[int, BodeResult] = {}
 
-    def _run_bode_for_iteration(self, iter_num: int) -> Optional[BodeResult]:
+    def _run_bode_for_iteration(self, iter_num: int, Kp: float, Ki: float, Kd: float, Kf: float) -> Optional[BodeResult]:
         if not getattr(self.config, "run_bode_analysis", False):
             return None
+        backend = self.config.backend
+        if backend == "ltspice":
+            bode = run_ltspice_loop_gain_analysis(
+                self.config,
+                Kp,
+                Ki,
+                Kd,
+                Kf,
+                getattr(self.config, "bode_freq_start_hz", 1e3),
+                getattr(self.config, "bode_freq_stop_hz", 1e5),
+                int(getattr(self.config, "bode_coarse_num_points", 31)),
+                int(getattr(self.config, "bode_dense_num_points", 51)),
+            )
+            fc_text = f"{bode.metrics.crossover_hz / 1000:.2f} kHz" if bode.metrics.crossover_hz is not None else "n/a"
+            pm_text = f"{bode.metrics.phase_margin_deg:.1f} deg" if bode.metrics.phase_margin_deg is not None else "n/a"
+            self.log_message.emit(
+                f"LTspice Bode iter {iter_num}: fc={fc_text} PM={pm_text} | "
+                f"time total={bode.elapsed_s:.1f}s coarse={bode.coarse_elapsed_s:.1f}s "
+                f"dense={bode.dense_elapsed_s:.1f}s points={len(bode.freq_hz)}"
+            )
+            return bode
         if self._auto_tuner is None or self._auto_tuner.plecs.server is None:
             return None
         bode = run_loop_gain_analysis(
@@ -350,7 +471,7 @@ class TunerWorker(QObject):
         fc_text = f"{bode.metrics.crossover_hz / 1000:.2f} kHz" if bode.metrics.crossover_hz is not None else "n/a"
         pm_text = f"{bode.metrics.phase_margin_deg:.1f} deg" if bode.metrics.phase_margin_deg is not None else "n/a"
         self.log_message.emit(
-            f"Bode iter {iter_num}: fc={fc_text} PM={pm_text} | "
+            f"PLECS Bode iter {iter_num}: fc={fc_text} PM={pm_text} | "
             f"time total={bode.elapsed_s:.1f}s coarse={bode.coarse_elapsed_s:.1f}s "
             f"dense={bode.dense_elapsed_s:.1f}s"
         )
@@ -379,6 +500,13 @@ class TunerWorker(QObject):
             il_vals.append(vals[1] if len(vals) > 1 else 0)
             vout_vals.append(vals[vout_col] if len(vals) > vout_col else 0)
         return time_vals, vout_vals, il_vals
+
+    @staticmethod
+    def _decimate_rows(rows: List[List[float]], max_points: int = 5000) -> List[List[float]]:
+        if len(rows) <= max_points or max_points < 2:
+            return rows
+        last_idx = len(rows) - 1
+        return [rows[round(i * last_idx / (max_points - 1))] for i in range(max_points)]
 
     def _write_workbooks(self, results: List[TuningResult]) -> None:
         results_dir = Path(self.config.results_dir)
@@ -430,9 +558,19 @@ class TunerWorker(QObject):
         try:
             at = AutoTuner(self.config)
             self._auto_tuner = at
-            self.log_message.emit("Connecting to PLECS...")
+            backend_label = "LTspice" if self.config.backend == "ltspice" else "PLECS"
+            self.log_message.emit(f"Preparing {backend_label}...")
+            self.status_changed.emit({'backend': f'{backend_label} starting', 'mode': 'Auto'})
             at.setup()
-            self.log_message.emit("Connected. Starting tuning loop.")
+            self.status_changed.emit({
+                'backend': f'{backend_label} ready',
+                'mode': 'Auto',
+                'results_dir': str(self.config.results_dir),
+                'work_model_path': str(at.work_model_path or ''),
+            })
+            self.log_message.emit(f"{backend_label} ready. Starting tuning loop.")
+            self.log_message.emit(f"Results directory: {self.config.results_dir}")
+            self.log_message.emit(f"Working model copy: {at.work_model_path}")
 
             Kp, Ki, Kd, Kf = at.tuner.get_initial_params()
             self.log_message.emit(
@@ -451,9 +589,10 @@ class TunerWorker(QObject):
 
                 header = at.last_header
                 data_rows = at.last_data
-                t, v, il = self._waveform_from_data(header, data_rows)
-                bode = self._run_bode_for_iteration(i)
-                self._waveform_store[i] = {'header': header, 'data': data_rows}
+                plot_rows = self._decimate_rows(data_rows)
+                t, v, il = self._waveform_from_data(header, plot_rows)
+                bode = self._run_bode_for_iteration(i, result.Kp, result.Ki, result.Kd, result.Kf)
+                self._waveform_store[i] = {'header': header, 'data': plot_rows}
                 if bode is not None:
                     self._bode_store[i] = bode
                 figures_dir = Path(self.config.results_dir)
@@ -473,7 +612,29 @@ class TunerWorker(QObject):
                     'vout': v,
                     'il': il,
                     'bode': bode,
+                    'phase': phase,
+                    'backend': self.config.backend,
+                    'results_dir': str(self.config.results_dir),
+                    'work_model_path': str(at.work_model_path or ''),
                 }
+                bode_metrics = {
+                    'fc': bode.metrics.crossover_hz if bode is not None else None,
+                    'pm': bode.metrics.phase_margin_deg if bode is not None else None,
+                    'gm': bode.metrics.gain_margin_db if bode is not None else None,
+                }
+                self._waveform_store[i].update({
+                    'phase': phase,
+                    'bode_metrics': bode_metrics,
+                    'targets': {
+                        'target_os': self.config.target_overshoot,
+                        'target_us': self.config.target_undershoot,
+                        'max_osc': self.config.max_oscillations,
+                        'target_ts': self.config.target_settling_time,
+                    },
+                    'backend': self.config.backend,
+                    'results_dir': str(self.config.results_dir),
+                    'work_model_path': str(at.work_model_path or ''),
+                })
 
                 msg = (
                     f"Time Iter {i}: phase={phase} | OS={result.overshoot:.1f}% "
@@ -508,10 +669,20 @@ class TunerWorker(QObject):
                 at = AutoTuner(self.config)
                 self._auto_tuner = at
             at = self._auto_tuner
-            self.log_message.emit("Connecting to PLECS...")
+            backend_label = "LTspice" if self.config.backend == "ltspice" else "PLECS"
+            self.log_message.emit(f"Preparing {backend_label}...")
+            self.status_changed.emit({'backend': f'{backend_label} starting', 'mode': 'Single'})
             at.config = self.config
             at.setup()
-            self.log_message.emit("Connected. Model reloaded with current GUI bode settings.")
+            self.status_changed.emit({
+                'backend': f'{backend_label} ready',
+                'mode': 'Single',
+                'results_dir': str(self.config.results_dir),
+                'work_model_path': str(at.work_model_path or ''),
+            })
+            self.log_message.emit(f"{backend_label} ready. Model reloaded with current GUI Bode settings.")
+            self.log_message.emit(f"Results directory: {self.config.results_dir}")
+            self.log_message.emit(f"Working model copy: {at.work_model_path}")
 
             phase = getattr(at.tuner, "phase", "unknown")
             result = at.run_iteration(iter_num, Kp, Ki, Kd, Kf)
@@ -519,11 +690,29 @@ class TunerWorker(QObject):
 
             header = at.last_header
             data_rows = at.last_data
-            t, v, il = self._waveform_from_data(header, data_rows)
-            bode = self._run_bode_for_iteration(iter_num)
-            self._waveform_store[iter_num] = {'header': header, 'data': data_rows}
+            plot_rows = self._decimate_rows(data_rows)
+            t, v, il = self._waveform_from_data(header, plot_rows)
+            bode = self._run_bode_for_iteration(iter_num, result.Kp, result.Ki, result.Kd, result.Kf)
+            self._waveform_store[iter_num] = {'header': header, 'data': plot_rows}
             if bode is not None:
                 self._bode_store[iter_num] = bode
+            self._waveform_store[iter_num].update({
+                'phase': phase,
+                'bode_metrics': {
+                    'fc': bode.metrics.crossover_hz if bode is not None else None,
+                    'pm': bode.metrics.phase_margin_deg if bode is not None else None,
+                    'gm': bode.metrics.gain_margin_db if bode is not None else None,
+                },
+                'targets': {
+                    'target_os': self.config.target_overshoot,
+                    'target_us': self.config.target_undershoot,
+                    'max_osc': self.config.max_oscillations,
+                    'target_ts': self.config.target_settling_time,
+                },
+                'backend': self.config.backend,
+                'results_dir': str(self.config.results_dir),
+                'work_model_path': str(at.work_model_path or ''),
+            })
             figures_dir = Path(self.config.results_dir)
             figures_dir.mkdir(parents=True, exist_ok=True)
             save_iteration_frame(
@@ -542,6 +731,10 @@ class TunerWorker(QObject):
             )
             self.iteration_complete.emit({
                 'result': result, 'time': t, 'vout': v, 'il': il, 'bode': bode,
+                'phase': phase,
+                'backend': self.config.backend,
+                'results_dir': str(self.config.results_dir),
+                'work_model_path': str(at.work_model_path or ''),
                 'next_params': (next_Kp, next_Ki, next_Kd, next_Kf),
             })
             msg = (
@@ -569,11 +762,9 @@ class BuckTunerGui(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PLECS Buck Converter PID Auto-Tuner")
+        self.setWindowTitle("Buck Converter PID Auto-Tuner")
         screen = QApplication.primaryScreen().availableGeometry()
-        w = min(1500, screen.width() - 40)
-        h = min(940, screen.height() - 60)
-        self.resize(w, h)
+        self.setGeometry(screen)
 
         self._results: List[TuningResult] = []
         self._waveform_history: List[dict] = []
@@ -585,10 +776,12 @@ class BuckTunerGui(QMainWindow):
         self._circuit_pixmap: Optional[QPixmap] = None
         self._results_root_dir = Path(TuningConfig().results_dir)
         self._current_results_dir: Optional[Path] = None
+        self._best_result: Optional[TuningResult] = None
+        self._pid_design_dirty = False
         self._model_sync_ready = False
         self._model_sync_timer = QTimer(self)
         self._model_sync_timer.setSingleShot(True)
-        self._model_sync_timer.timeout.connect(self._sync_gui_to_plecs_file)
+        self._model_sync_timer.timeout.connect(self._sync_gui_to_model)
 
         self._build_ui()
         self._connect_model_sync_signals()
@@ -597,6 +790,130 @@ class BuckTunerGui(QMainWindow):
         self._apply_dark_theme()
 
     # ---- UI Construction ----
+
+    def _make_status_value(self, text: str = "-") -> QLabel:
+        label = QLabel(text)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        label.setMinimumWidth(110)
+        label.setStyleSheet("color: #e8e8eb; font-weight: 600;")
+        return label
+
+    def _build_status_panel(self) -> CollapsibleSection:
+        panel = CollapsibleSection("Run Status", expanded=True, compact=True)
+        layout = QGridLayout()
+        layout.setContentsMargins(10, 12, 10, 8)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(5)
+        panel.content_layout.addLayout(layout)
+
+        self.lbl_plecs_status = self._make_status_value("Idle")
+        self.lbl_run_mode = self._make_status_value("Ready")
+        self.lbl_iter_status = self._make_status_value("0 / 0")
+        self.lbl_search_phase = self._make_status_value("-")
+        self.lbl_current_result = self._make_status_value("-")
+        self.lbl_best_result = self._make_status_value("-")
+        self.lbl_results_dir = self._make_status_value(str(self._results_root_dir))
+        self.lbl_work_model = self._make_status_value("-")
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
+        self.progress.setTextVisible(True)
+
+        items = [
+            ("Backend", self.lbl_plecs_status),
+            ("Mode", self.lbl_run_mode),
+            ("Iter", self.lbl_iter_status),
+            ("Phase", self.lbl_search_phase),
+            ("Current", self.lbl_current_result),
+            ("Best", self.lbl_best_result),
+            ("Results", self.lbl_results_dir),
+            ("Work model", self.lbl_work_model),
+        ]
+        for idx, (name, widget) in enumerate(items):
+            row = idx // 2
+            col = (idx % 2) * 2
+            name_label = QLabel(name)
+            name_label.setStyleSheet("color: #707076;")
+            layout.addWidget(name_label, row, col)
+            layout.addWidget(widget, row, col + 1)
+
+        layout.addWidget(self.progress, 4, 0, 1, 4)
+        return panel
+
+    def _build_history_panel(self) -> CollapsibleSection:
+        panel = CollapsibleSection("Iteration History", expanded=True, compact=True)
+        layout = panel.content_layout
+        self.history_table = QTableWidget(0, 15)
+        self.history_table.setHorizontalHeaderLabels([
+            "Iter", "Phase", "Status", "OS%", "US%", "Osc", "Ts ms",
+            "Kp", "Ki", "Kd", "Kf", "fc Hz", "PM deg", "GM dB", "Result dir",
+        ])
+        self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.history_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.history_table.verticalHeader().setVisible(False)
+        self.history_table.setAlternatingRowColors(True)
+        self.history_table.setMinimumHeight(150)
+        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.history_table.horizontalHeader().setStretchLastSection(True)
+        self.history_table.cellClicked.connect(self.on_history_row_selected)
+        layout.addWidget(self.history_table)
+        return panel
+
+    def _add_path_row(self, layout: QGridLayout, row: int, label: str, value: str, file_filter: str):
+        name = QLabel(label)
+        edit = QLineEdit(value)
+        edit.setMinimumWidth(120)
+        edit.setToolTip(value)
+        edit.textChanged.connect(lambda text, e=edit: e.setToolTip(text))
+        button = QPushButton("...")
+        button.setFixedWidth(30)
+        button.clicked.connect(lambda _checked=False, e=edit, t=label, f=file_filter: self._browse_path(e, t, f))
+        layout.addWidget(name, row, 0)
+        layout.addWidget(edit, row, 1)
+        layout.addWidget(button, row, 2)
+        return [name, edit, button], edit
+
+    def _build_backend_panel(self, cfg: TuningConfig) -> CollapsibleSection:
+        panel = CollapsibleSection("Simulation Backend", expanded=True)
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(6)
+        layout.setVerticalSpacing(4)
+        panel.content_layout.addLayout(layout)
+
+        layout.addWidget(QLabel("Backend:"), 0, 0)
+        self.combo_backend = QComboBox()
+        self.combo_backend.addItem("PLECS", "plecs")
+        self.combo_backend.addItem("LTspice", "ltspice")
+        self.combo_backend.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
+        layout.addWidget(self.combo_backend, 0, 1, 1, 2)
+
+        self._plecs_path_widgets = []
+        self._ltspice_path_widgets = []
+        widgets, self.edit_plecs_model = self._add_path_row(
+            layout, 1, "PLECS model:", cfg.plecs_model, "PLECS Models (*.plecs);;All Files (*)")
+        self._plecs_path_widgets.extend(widgets)
+        widgets, self.edit_plecs_exe = self._add_path_row(
+            layout, 2, "PLECS exe:", cfg.plecs_exe, "Executables (*.exe);;All Files (*)")
+        self._plecs_path_widgets.extend(widgets)
+
+        widgets, self.edit_ltspice_exe = self._add_path_row(
+            layout, 3, "LTspice exe:", cfg.ltspice_exe, "Executables (*.exe);;All Files (*)")
+        self._ltspice_path_widgets.extend(widgets)
+        widgets, self.edit_ltspice_asc = self._add_path_row(
+            layout, 4, "LTspice asc:", cfg.ltspice_asc_model, "LTspice Schematics (*.asc);;All Files (*)")
+        self._ltspice_path_widgets.extend(widgets)
+        widgets, self.edit_ltspice_net = self._add_path_row(
+            layout, 5, "LTspice tran:", cfg.ltspice_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
+        self._ltspice_path_widgets.extend(widgets)
+        widgets, self.edit_ltspice_bode = self._add_path_row(
+            layout, 6, "LTspice Bode:", cfg.ltspice_bode_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
+        self._ltspice_path_widgets.extend(widgets)
+
+        self.combo_backend.currentIndexChanged.connect(self._on_backend_changed)
+        QTimer.singleShot(0, self._on_backend_changed)
+        return panel
 
     def _build_ui(self):
         cfg = TuningConfig()
@@ -617,16 +934,23 @@ class BuckTunerGui(QMainWindow):
         left_layout.setContentsMargins(8, 4, 6, 4)
         left_layout.setSpacing(4)
 
+        left_layout.addWidget(self._build_backend_panel(cfg))
+
         # Circuit image
-        grp_img = QGroupBox("Circuit")
-        img_layout = QVBoxLayout(grp_img)
+        grp_img = CollapsibleSection("Circuit", expanded=False)
+        img_layout = grp_img.content_layout
         self.circuit_label = QLabel("No image captured")
         self.circuit_label.setAlignment(Qt.AlignCenter)
-        self.circuit_label.setMinimumHeight(180)
+        self.circuit_label.setMinimumHeight(165)
+        self.circuit_label.setMaximumHeight(165)
         self.circuit_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.circuit_label.setStyleSheet("background: #1c1c1f; color: #707076;")
         img_layout.addWidget(self.circuit_label)
-        btn_capture = QPushButton("Capture from PLECS")
+        self.btn_open_model = QPushButton("Open Model")
+        self.btn_open_model.clicked.connect(self.on_open_model)
+        img_layout.addWidget(self.btn_open_model)
+        self.btn_capture = QPushButton("Capture from PLECS")
+        btn_capture = self.btn_capture
         btn_capture.clicked.connect(self.on_capture_circuit)
         img_layout.addWidget(btn_capture)
         left_layout.addWidget(grp_img)
@@ -645,6 +969,9 @@ class BuckTunerGui(QMainWindow):
         dv_layout = grp_dv.content_layout
         self.spin_wc = self._make_spin("wc (rad/s):", 47140, 314159, 0, 1000, cfg.wc_initial, dv_layout)
         self.spin_phim = self._make_spin("phi_m (deg):", 30, 80, 1, 1, math.degrees(cfg.phi_m_initial), dv_layout)
+        self.lbl_pid_sync = QLabel("PID matches design variables")
+        self.lbl_pid_sync.setStyleSheet("color: #00d4aa;")
+        dv_layout.addWidget(self.lbl_pid_sync)
         btn_compute = QPushButton("Compute PID from wc / phi_m")
         btn_compute.clicked.connect(self.on_compute_pid)
         dv_layout.addWidget(btn_compute)
@@ -663,7 +990,7 @@ class BuckTunerGui(QMainWindow):
         grp_bode = CollapsibleSection("Bode Analysis", expanded=True)
         bode_layout = grp_bode.content_layout
         self.chk_run_bode = QCheckBox("Run bode plot analysis")
-        self.chk_run_bode.setChecked(True)
+        self.chk_run_bode.setChecked(cfg.run_bode_analysis)
         bode_layout.addWidget(self.chk_run_bode)
         self.spin_bode_f_start = self._make_spin("Start f (Hz):", 10, 1e7, 0, 100, 1000, bode_layout)
         self.spin_bode_f_stop = self._make_spin("Stop f (Hz):", 100, 1e7, 0, 1000, 100000, bode_layout)
@@ -744,6 +1071,12 @@ class BuckTunerGui(QMainWindow):
         main_splitter.addWidget(left_scroll)
 
         # Right panel
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(6, 6, 8, 6)
+        right_layout.setSpacing(6)
+        right_layout.addWidget(self._build_status_panel())
+
         right_splitter = QSplitter(Qt.Vertical)
         top_splitter = QSplitter(Qt.Horizontal)
         self.waveform_canvas = WaveformCanvas(top_splitter)
@@ -765,7 +1098,9 @@ class BuckTunerGui(QMainWindow):
         right_splitter.setStretchFactor(0, 5)
         right_splitter.setStretchFactor(1, 3)
         right_splitter.setSizes([700, 240])
-        main_splitter.addWidget(right_splitter)
+        right_layout.addWidget(right_splitter, 1)
+        right_layout.addWidget(self._build_history_panel())
+        main_splitter.addWidget(right_panel)
         main_splitter.setChildrenCollapsible(False)
         main_splitter.setStretchFactor(0, 0)
         main_splitter.setStretchFactor(1, 1)
@@ -791,23 +1126,36 @@ class BuckTunerGui(QMainWindow):
         return spin
 
     def _set_circuit_pixmap(self, pixmap: QPixmap) -> None:
-        """Render the circuit image fully inside the preview area."""
+        """Render the full circuit image inside the preview area without cropping."""
         if pixmap.isNull():
             return
         self._circuit_pixmap = pixmap
-        target_width = max(1, self.circuit_label.contentsRect().width())
-        if target_width <= 1:
-            target_width = max(1, self.circuit_label.width())
-        scaled = pixmap.scaledToWidth(target_width, Qt.SmoothTransformation)
-        self.circuit_label.setMinimumHeight(scaled.height())
-        self.circuit_label.setMaximumHeight(scaled.height())
-        self.circuit_label.setMinimumSize(QSize(target_width, scaled.height()))
+        label_size = self.circuit_label.contentsRect().size()
+        target_width = max(1, label_size.width() - 4)
+        target_height = max(1, label_size.height() - 4)
         scaled = pixmap.scaled(
-            QSize(target_width, scaled.height()),
+            QSize(target_width, target_height),
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation,
         )
         self.circuit_label.setPixmap(scaled)
+
+    def on_open_model(self) -> None:
+        cfg = self._make_config()
+        if cfg.backend == "ltspice":
+            model_path = Path(cfg.ltspice_asc_model).resolve()
+            label = "LTspice schematic"
+        else:
+            model_path = Path(cfg.plecs_model).resolve()
+            label = "PLECS model"
+        if not model_path.exists():
+            QMessageBox.warning(self, "Model Not Found", f"{label} not found:\n{model_path}")
+            return
+        try:
+            os.startfile(str(model_path))
+            self.on_log(f"Opened {label}: {model_path}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Cannot Open Model", f"Could not open {label}:\n{exc}")
 
     def _load_default_circuit_image(self) -> None:
         """Load the checked-in circuit screenshot if it exists."""
@@ -834,14 +1182,23 @@ class BuckTunerGui(QMainWindow):
             QToolButton { background: #1f1f23; color: #e8e8eb; border: 1px solid #2a2a2e;
                           border-radius: 4px; padding: 5px 8px; text-align: left;
                           font-weight: 600; }
+            QToolButton[compact="true"] { padding: 2px 7px; min-height: 18px; max-height: 22px;
+                                          font-size: 8.5pt; border-radius: 3px; }
             QToolButton:hover { background: #2a2a30; border: 1px solid #3a3a40; }
-            QDoubleSpinBox, QSpinBox, QLineEdit {
+            QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox {
                 background: #111113; color: #e8e8eb; border: 1px solid #2a2a2e;
                 border-radius: 3px; padding: 3px 5px; }
-            QDoubleSpinBox:focus, QSpinBox:focus, QLineEdit:focus {
+            QDoubleSpinBox:focus, QSpinBox:focus, QLineEdit:focus, QComboBox:focus {
                 border: 1px solid #00d4aa; }
             QLabel { color: #9a9aa0; }
             QStatusBar { color: #707076; }
+            QProgressBar { background: #111113; color: #e8e8eb; border: 1px solid #2a2a2e;
+                           border-radius: 3px; text-align: center; height: 16px; }
+            QProgressBar::chunk { background: #00a889; border-radius: 2px; }
+            QTableWidget { background: #111113; color: #d8d8dc; gridline-color: #2a2a2e;
+                           alternate-background-color: #17171a; selection-background-color: #263447; }
+            QHeaderView::section { background: #1f1f23; color: #9a9aa0; border: 1px solid #2a2a2e;
+                                   padding: 3px 5px; }
             QSplitter::handle { background: #2a2a2e; height: 3px; }
             QScrollBar:vertical { background: #141416; width: 8px; border: none; }
             QScrollBar::handle:vertical { background: #2a2a2e; border-radius: 4px;
@@ -853,8 +1210,42 @@ class BuckTunerGui(QMainWindow):
 
     # ---- Slots ----
 
+    def _selected_backend(self) -> str:
+        if not hasattr(self, "combo_backend"):
+            return TuningConfig().backend
+        return str(self.combo_backend.currentData() or "plecs")
+
+    def _browse_path(self, edit: QLineEdit, title: str, file_filter: str) -> None:
+        current = Path(edit.text()).expanduser()
+        start_dir = str(current.parent if current.parent.exists() else Path.cwd())
+        path, _ = QFileDialog.getOpenFileName(self, title, start_dir, file_filter)
+        if path:
+            edit.setText(path)
+
+    def _on_backend_changed(self, *_args) -> None:
+        backend = self._selected_backend()
+        show_plecs = backend == "plecs"
+        for widget in getattr(self, "_plecs_path_widgets", []):
+            widget.setVisible(show_plecs)
+        for widget in getattr(self, "_ltspice_path_widgets", []):
+            widget.setVisible(not show_plecs)
+        if hasattr(self, "btn_capture"):
+            self.btn_capture.setEnabled(show_plecs)
+        if hasattr(self, "spin_bode_cycles"):
+            self.spin_bode_cycles.setEnabled(show_plecs)
+            self.spin_bode_dense_points.setEnabled(True)
+        backend_label = "PLECS" if show_plecs else "LTspice"
+        self._update_status_panel(backend=f"{backend_label} selected")
+
     def _make_config(self) -> TuningConfig:
         cfg = TuningConfig()
+        cfg.sim_backend = self._selected_backend()
+        cfg.plecs_model = self.edit_plecs_model.text().strip()
+        cfg.plecs_exe = self.edit_plecs_exe.text().strip()
+        cfg.ltspice_exe = self.edit_ltspice_exe.text().strip()
+        cfg.ltspice_asc_model = self.edit_ltspice_asc.text().strip()
+        cfg.ltspice_netlist_model = self.edit_ltspice_net.text().strip()
+        cfg.ltspice_bode_netlist_model = self.edit_ltspice_bode.text().strip()
         cfg.target_overshoot = self.spin_tgt_os.value()
         cfg.target_undershoot = self.spin_tgt_us.value()
         cfg.max_oscillations = int(self.spin_max_osc.value())
@@ -872,6 +1263,160 @@ class BuckTunerGui(QMainWindow):
             cfg.results_dir = str(self._current_results_dir)
         return cfg
 
+    def _validate_or_warn(self, config: TuningConfig) -> bool:
+        errors = validate_config_values(config)
+        if not errors:
+            return True
+        QMessageBox.warning(
+            self,
+            "Cannot Start Run",
+            "Please fix these settings before running:\n\n" + "\n".join(f"- {e}" for e in errors),
+        )
+        self.statusBar().showMessage("Run settings need attention.")
+        return False
+
+    def _metrics_targets(self) -> Tuple[float, float, int, float]:
+        return (
+            self.spin_tgt_os.value(),
+            self.spin_tgt_us.value(),
+            int(self.spin_max_osc.value()),
+            self.spin_tgt_settle.value(),
+        )
+
+    @staticmethod
+    def _fmt_optional(value, fmt: str) -> str:
+        if value is None:
+            return "n/a"
+        try:
+            return format(value, fmt)
+        except Exception:
+            return str(value)
+
+    def _set_pid_dirty(self, *_args) -> None:
+        if not getattr(self, "lbl_pid_sync", None):
+            return
+        self._pid_design_dirty = True
+        self.lbl_pid_sync.setText("PID needs recompute from wc / phi_m")
+        self.lbl_pid_sync.setStyleSheet("color: #e0a030;")
+
+    def _set_pid_clean(self) -> None:
+        self._pid_design_dirty = False
+        self.lbl_pid_sync.setText("PID matches design variables")
+        self.lbl_pid_sync.setStyleSheet("color: #00d4aa;")
+
+    def _update_status_panel(self, **values) -> None:
+        if 'backend' in values:
+            self.lbl_plecs_status.setText(str(values['backend']))
+        if 'plecs' in values:
+            self.lbl_plecs_status.setText(str(values['plecs']))
+        if 'mode' in values:
+            self.lbl_run_mode.setText(str(values['mode']))
+        if 'phase' in values:
+            self.lbl_search_phase.setText(str(values['phase']))
+        if 'results_dir' in values and values['results_dir']:
+            self.lbl_results_dir.setText(str(values['results_dir']))
+            self.lbl_results_dir.setToolTip(str(values['results_dir']))
+        if 'work_model_path' in values and values['work_model_path']:
+            self.lbl_work_model.setText(Path(str(values['work_model_path'])).name)
+            self.lbl_work_model.setToolTip(str(values['work_model_path']))
+        if 'iter_num' in values or 'max_iterations' in values:
+            iter_num = int(values.get('iter_num', max(0, self._iter_counter)))
+            max_iter = int(values.get('max_iterations', max(1, self.spin_max_iter.value())))
+            self.lbl_iter_status.setText(f"{iter_num} / {max_iter}")
+            self.progress.setRange(0, max(1, max_iter))
+            self.progress.setValue(max(0, min(iter_num, max_iter)))
+        if 'current_result' in values and values['current_result'] is None:
+            self.lbl_current_result.setText("-")
+        elif 'current_result' in values and values['current_result'] is not None:
+            r = values['current_result']
+            self.lbl_current_result.setText(
+                f"{r.status} OS={r.overshoot:.1f}% US={r.undershoot:.1f}% Osc={r.osc_count}"
+            )
+        if 'best_result' in values and values['best_result'] is None:
+            self.lbl_best_result.setText("-")
+        elif 'best_result' in values and values['best_result'] is not None:
+            b = values['best_result']
+            self.lbl_best_result.setText(
+                f"Iter {b.iter_num} {b.status} OS={b.overshoot:.1f}% US={b.undershoot:.1f}%"
+            )
+
+    @pyqtSlot(object)
+    def on_worker_status(self, data: dict) -> None:
+        self._update_status_panel(**data)
+
+    def _clear_history_table(self) -> None:
+        self.history_table.setRowCount(0)
+
+    def _append_history_row(self, data: dict) -> None:
+        result: TuningResult = data['result']
+        bode = data.get('bode')
+        metrics = bode.metrics if bode is not None else None
+        row = self.history_table.rowCount()
+        self.history_table.insertRow(row)
+        values = [
+            str(result.iter_num),
+            str(data.get('phase', '-')),
+            result.status,
+            f"{result.overshoot:.2f}",
+            f"{result.undershoot:.2f}",
+            str(result.osc_count),
+            f"{result.settling_time * 1000.0:.3f}",
+            f"{result.Kp:.5f}",
+            f"{result.Ki:.2f}",
+            f"{result.Kd:.2e}",
+            f"{result.Kf:.0f}",
+            self._fmt_optional(metrics.crossover_hz if metrics else None, ".0f"),
+            self._fmt_optional(metrics.phase_margin_deg if metrics else None, ".1f"),
+            self._fmt_optional(metrics.gain_margin_db if metrics else None, ".1f"),
+            str(data.get('results_dir', '')),
+        ]
+        for col, text in enumerate(values):
+            item = QTableWidgetItem(text)
+            item.setData(Qt.UserRole, len(self._waveform_history) - 1)
+            if result.status == "PASS":
+                item.setForeground(QColor("#00d4aa"))
+            self.history_table.setItem(row, col, item)
+        self.history_table.selectRow(row)
+
+    def _show_history_index(self, idx: int) -> None:
+        if idx < 0 or idx >= len(self._waveform_history):
+            return
+        data = self._waveform_history[idx]
+        result = data['result']
+        self.spin_kp.setValue(result.Kp)
+        self.spin_ki.setValue(result.Ki)
+        self.spin_kd.setValue(result.Kd)
+        self.spin_kf.setValue(result.Kf)
+        target_os, target_us, max_osc, target_ts_ms = self._metrics_targets()
+        if data.get('time') and data.get('vout'):
+            self.waveform_canvas.update_plot(
+                self._waveform_history,
+                idx,
+                target_os=target_os,
+                target_us=target_us,
+            )
+        self.bode_canvas.update_bode(data.get('bode'), result.iter_num)
+        self.metrics_canvas.update_metrics(
+            self._results,
+            target_os=target_os,
+            target_us=target_us,
+            max_osc=max_osc,
+            target_ts_ms=target_ts_ms,
+        )
+        self._update_status_panel(
+            phase=data.get('phase', '-'),
+            current_result=result,
+            iter_num=result.iter_num + 1,
+            max_iterations=max(1, self.spin_max_iter.value()),
+        )
+
+    def on_history_row_selected(self, row: int, _col: int) -> None:
+        item = self.history_table.item(row, 0)
+        if item is None:
+            return
+        idx = item.data(Qt.UserRole)
+        self._show_history_index(int(idx) if idx is not None else row)
+
     def _connect_model_sync_signals(self) -> None:
         widgets = [
             self.spin_kp, self.spin_ki, self.spin_kd, self.spin_kf,
@@ -884,14 +1429,22 @@ class BuckTunerGui(QMainWindow):
         for widget in widgets:
             widget.valueChanged.connect(self._queue_model_sync)
         self.chk_run_bode.toggled.connect(self._queue_model_sync)
+        self.combo_backend.currentIndexChanged.connect(self._queue_model_sync)
+        for edit in (
+            self.edit_plecs_model, self.edit_plecs_exe,
+            self.edit_ltspice_exe, self.edit_ltspice_asc,
+            self.edit_ltspice_net, self.edit_ltspice_bode,
+        ):
+            edit.textChanged.connect(self._queue_model_sync)
+        self.spin_wc.valueChanged.connect(self._set_pid_dirty)
+        self.spin_phim.valueChanged.connect(self._set_pid_dirty)
 
     def _queue_model_sync(self, *_args) -> None:
         return
 
-    def _sync_gui_to_plecs_file(self) -> None:
-        # The GUI deliberately does not write the source .plecs file.
-        # AutoTuner copies the template to plecs_tuning_work/ and patches that
-        # disposable copy with current PID/Bode settings when a run starts.
+    def _sync_gui_to_model(self) -> None:
+        # The GUI deliberately does not write source models. AutoTuner copies
+        # the selected PLECS/LTspice template to a work directory for each run.
         return
 
     def _prune_old_run_folders(self) -> None:
@@ -926,6 +1479,7 @@ class BuckTunerGui(QMainWindow):
         self._worker.tuning_finished.connect(self.on_tuning_finished)
         self._worker.log_message.connect(self.on_log)
         self._worker.error_occurred.connect(self.on_error)
+        self._worker.status_changed.connect(self.on_worker_status)
         self._run_single_sig.connect(self._worker.run_single)
         self._thread.start()
 
@@ -956,13 +1510,28 @@ class BuckTunerGui(QMainWindow):
             return
 
         self._model_sync_timer.stop()
-        self._sync_gui_to_plecs_file()
+        self._sync_gui_to_model()
         cfg = self._make_config()
+        if not self._validate_or_warn(cfg):
+            return
         self._results.clear()
         self._waveform_history.clear()
+        self._best_result = None
         self._iter_counter = 0
         self._clear_bode_results()
         cfg.results_dir = str(self._current_results_dir)
+        self._clear_history_table()
+        self._update_status_panel(
+            backend=f"{'LTspice' if cfg.backend == 'ltspice' else 'PLECS'} queued",
+            mode="Auto",
+            phase="bootstrap",
+            current_result=None,
+            best_result=None,
+            iter_num=0,
+            max_iterations=cfg.max_iterations,
+            results_dir=cfg.results_dir,
+            work_model_path="-",
+        )
         self.waveform_canvas._draw_empty(
             target_os=cfg.target_overshoot,
             target_us=cfg.target_undershoot)
@@ -981,9 +1550,18 @@ class BuckTunerGui(QMainWindow):
         if self._iter_counter == 0:
             self._clear_bode_results()
         self._model_sync_timer.stop()
-        self._sync_gui_to_plecs_file()
+        self._sync_gui_to_model()
         cfg = self._make_config()
+        if not self._validate_or_warn(cfg):
+            return
         cfg.results_dir = str(self._current_results_dir)
+        self._update_status_panel(
+            backend=f"{'LTspice' if cfg.backend == 'ltspice' else 'PLECS'} queued",
+            mode="Single",
+            iter_num=self._iter_counter,
+            max_iterations=cfg.max_iterations,
+            results_dir=cfg.results_dir,
+        )
         if self._worker is None:
             self._start_worker(cfg)
         else:
@@ -1027,12 +1605,21 @@ class BuckTunerGui(QMainWindow):
         self._iter_counter = 0
         self._run_mode = None
         self._auto_tune_completed = False
+        self._best_result = None
         self._current_results_dir = None
+        self._clear_history_table()
 
         # Reset spinboxes to defaults
         cfg = TuningConfig()
         comp = CompensatorDesign()
         ref_Kp, ref_Ki, ref_Kd, ref_Kf = comp.compute(cfg.wc_initial, cfg.phi_m_initial)
+        self.combo_backend.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
+        self.edit_plecs_model.setText(cfg.plecs_model)
+        self.edit_plecs_exe.setText(cfg.plecs_exe)
+        self.edit_ltspice_exe.setText(cfg.ltspice_exe)
+        self.edit_ltspice_asc.setText(cfg.ltspice_asc_model)
+        self.edit_ltspice_net.setText(cfg.ltspice_netlist_model)
+        self.edit_ltspice_bode.setText(cfg.ltspice_bode_netlist_model)
         self.spin_kp.setValue(ref_Kp)
         self.spin_ki.setValue(ref_Ki)
         self.spin_kd.setValue(ref_Kd)
@@ -1044,12 +1631,13 @@ class BuckTunerGui(QMainWindow):
         self.spin_max_osc.setValue(cfg.max_oscillations)
         self.spin_tgt_settle.setValue(cfg.target_settling_time * 1000.0)
         self.spin_max_iter.setValue(cfg.max_iterations)
-        self.chk_run_bode.setChecked(True)
+        self.chk_run_bode.setChecked(cfg.run_bode_analysis)
         self.spin_bode_f_start.setValue(1000)
         self.spin_bode_f_stop.setValue(100000)
         self.spin_bode_cycles.setValue(cfg.bode_extraction_cycles)
         self.spin_bode_coarse_points.setValue(cfg.bode_coarse_num_points)
         self.spin_bode_dense_points.setValue(cfg.bode_dense_num_points)
+        self._set_pid_clean()
 
         # Clear plots
         self.waveform_canvas._draw_empty(
@@ -1060,6 +1648,17 @@ class BuckTunerGui(QMainWindow):
 
         self.log_text.clear()
         self._set_running(False)
+        self._update_status_panel(
+            backend=f"{'LTspice' if cfg.backend == 'ltspice' else 'PLECS'} selected",
+            mode="Ready",
+            phase="-",
+            current_result=None,
+            best_result=None,
+            iter_num=0,
+            max_iterations=cfg.max_iterations,
+            results_dir=str(self._results_root_dir),
+            work_model_path="-",
+        )
         self.statusBar().showMessage("Reset to defaults.")
 
     def on_compute_pid(self):
@@ -1071,6 +1670,7 @@ class BuckTunerGui(QMainWindow):
         self.spin_ki.setValue(Ki)
         self.spin_kd.setValue(Kd)
         self.spin_kf.setValue(Kf)
+        self._set_pid_clean()
         self.on_log(f"Computed: Kp={Kp:.5f} Ki={Ki:.2f} Kd={Kd:.2e} Kf={Kf:.0f}")
 
     def on_capture_circuit(self):
@@ -1133,6 +1733,7 @@ class BuckTunerGui(QMainWindow):
         self._results.append(result)
         self._waveform_history.append(data)
         self._iter_counter = result.iter_num + 1
+        self._best_result = select_best_result(self._results)
 
         # Update PID fields: show next iteration's params if available, else current
         if 'next_params' in data:
@@ -1149,13 +1750,32 @@ class BuckTunerGui(QMainWindow):
 
         # Update plots
         idx = len(self._waveform_history) - 1
+        target_os, target_us, max_osc, target_ts_ms = self._metrics_targets()
         if data['time'] and data['vout']:
             self.waveform_canvas.update_plot(
                 self._waveform_history, idx,
-                target_os=self.spin_tgt_os.value(),
-                target_us=self.spin_tgt_us.value())
+                target_os=target_os,
+                target_us=target_us)
         self.bode_canvas.update_bode(data.get('bode'), result.iter_num)
-        self.metrics_canvas.update_metrics(self._results)
+        self.metrics_canvas.update_metrics(
+            self._results,
+            target_os=target_os,
+            target_us=target_us,
+            max_osc=max_osc,
+            target_ts_ms=target_ts_ms,
+        )
+        self._append_history_row(data)
+        self._update_status_panel(
+            backend=f"{'LTspice' if data.get('backend') == 'ltspice' else 'PLECS'} ready",
+            mode="Auto" if self._run_mode == "auto" else "Single",
+            phase=data.get('phase', '-'),
+            current_result=result,
+            best_result=self._best_result,
+            iter_num=self._iter_counter,
+            max_iterations=max(1, int(self.spin_max_iter.value())),
+            results_dir=data.get('results_dir', ''),
+            work_model_path=data.get('work_model_path', ''),
+        )
 
         # Status bar
         self.statusBar().showMessage(
@@ -1168,6 +1788,7 @@ class BuckTunerGui(QMainWindow):
         best = select_best_result(self._results)
         if best is None:
             return
+        self._best_result = best
         best_idx = next(
             (idx for idx, item in enumerate(self._waveform_history)
              if item['result'].iter_num == best.iter_num),
@@ -1180,12 +1801,24 @@ class BuckTunerGui(QMainWindow):
         self.spin_ki.setValue(best.Ki)
         self.spin_kd.setValue(best.Kd)
         self.spin_kf.setValue(best.Kf)
+        target_os, target_us, max_osc, target_ts_ms = self._metrics_targets()
         self.waveform_canvas.update_plot(
             self._waveform_history, best_idx,
-            target_os=self.spin_tgt_os.value(),
-            target_us=self.spin_tgt_us.value())
+            target_os=target_os,
+            target_us=target_us)
         self.bode_canvas.update_bode(self._waveform_history[best_idx].get('bode'), best.iter_num)
-        self.metrics_canvas.update_metrics(self._results)
+        self.metrics_canvas.update_metrics(
+            self._results,
+            target_os=target_os,
+            target_us=target_us,
+            max_osc=max_osc,
+            target_ts_ms=target_ts_ms,
+        )
+        self._update_status_panel(
+            phase=self._waveform_history[best_idx].get('phase', '-'),
+            current_result=best,
+            best_result=best,
+        )
         self.statusBar().showMessage(
             f"Best iter {best.iter_num} | {best.status} | "
             f"OS={best.overshoot:.2f}% US={best.undershoot:.2f}% Osc={best.osc_count}"
@@ -1203,6 +1836,11 @@ class BuckTunerGui(QMainWindow):
     @pyqtSlot(bool)
     def on_tuning_finished(self, success: bool):
         self._set_running(False)
+        self._update_status_panel(
+            mode="Complete" if success else "Stopped / Review",
+            backend=self.lbl_plecs_status.text(),
+            best_result=self._best_result,
+        )
         if self._run_mode == "auto":
             self._auto_tune_completed = True
             self._show_best_iteration()
@@ -1220,7 +1858,7 @@ class BuckTunerGui(QMainWindow):
 
     @pyqtSlot(str)
     def on_log(self, msg: str):
-        if msg.startswith("Bode iter") and self.log_text.toPlainText().strip():
+        if "Bode iter" in msg and self.log_text.toPlainText().strip():
             self.log_text.append("")
         self.log_text.append(msg)
 
@@ -1228,6 +1866,7 @@ class BuckTunerGui(QMainWindow):
     def on_error(self, msg: str):
         self.log_text.append(f"ERROR: {msg}")
         self.statusBar().showMessage(f"Error: {msg}")
+        self._update_status_panel(backend="Error", mode="Error")
         QMessageBox.critical(self, "Error", msg)
         self._set_running(False)
 
@@ -1237,6 +1876,13 @@ class BuckTunerGui(QMainWindow):
         self.btn_pause.setEnabled(running)
         self.btn_resume.setEnabled(False)
         self.btn_stop.setEnabled(running)
+        self.combo_backend.setEnabled(not running)
+        for edit in (
+            self.edit_plecs_model, self.edit_plecs_exe,
+            self.edit_ltspice_exe, self.edit_ltspice_asc,
+            self.edit_ltspice_net, self.edit_ltspice_bode,
+        ):
+            edit.setReadOnly(running)
         self.spin_kp.setReadOnly(running)
         self.spin_ki.setReadOnly(running)
         self.spin_kd.setReadOnly(running)
@@ -1265,7 +1911,7 @@ from PyQt5.QtCore import QMetaObject, Q_ARG
 def main():
     app = QApplication(sys.argv)
     window = BuckTunerGui()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec_())
 
 

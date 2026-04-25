@@ -14,13 +14,43 @@ from bode_plot import BodeResult, draw_bode_axes
 
 
 def write_time_workbook(path: Path, summary_rows: List[TuningResult], waveforms: Dict[int, Dict]) -> None:
-    workbook = xlsxwriter.Workbook(str(path))
+    workbook = xlsxwriter.Workbook(str(path), {"constant_memory": True})
     ws_summary = workbook.add_worksheet("Summary")
-    headers = ["Iter", "Kp", "Ki", "Kd", "Kf", "Overshoot", "Undershoot", "OscCount", "SettlingTime", "Status"]
+    headers = [
+        "Iter", "Backend", "Phase", "Kp", "Ki", "Kd", "Kf", "Overshoot", "Undershoot",
+        "OscCount", "SettlingTime", "Status", "TargetOS", "TargetUS", "MaxOsc",
+        "TargetSettlingTime", "Crossover_Hz", "PhaseMargin_deg", "GainMargin_dB",
+        "ResultsDir", "WorkModelPath",
+    ]
     for col, name in enumerate(headers):
         ws_summary.write(0, col, name)
     for row_idx, r in enumerate(summary_rows, start=1):
-        vals = [r.iter_num, r.Kp, r.Ki, r.Kd, r.Kf, r.overshoot, r.undershoot, r.osc_count, r.settling_time, r.status]
+        item = waveforms.get(r.iter_num, {})
+        targets = item.get("targets", {})
+        bode_metrics = item.get("bode_metrics", {})
+        vals = [
+            r.iter_num,
+            item.get("backend", ""),
+            item.get("phase", ""),
+            r.Kp,
+            r.Ki,
+            r.Kd,
+            r.Kf,
+            r.overshoot,
+            r.undershoot,
+            r.osc_count,
+            r.settling_time,
+            r.status,
+            targets.get("target_os", ""),
+            targets.get("target_us", ""),
+            targets.get("max_osc", ""),
+            targets.get("target_ts", ""),
+            bode_metrics.get("fc", ""),
+            bode_metrics.get("pm", ""),
+            bode_metrics.get("gm", ""),
+            item.get("results_dir", ""),
+            item.get("work_model_path", ""),
+        ]
         for col, val in enumerate(vals):
             ws_summary.write(row_idx, col, val)
 
@@ -38,7 +68,7 @@ def write_time_workbook(path: Path, summary_rows: List[TuningResult], waveforms:
 
 
 def write_bode_workbook(path: Path, bodes: Dict[int, BodeResult]) -> None:
-    workbook = xlsxwriter.Workbook(str(path))
+    workbook = xlsxwriter.Workbook(str(path), {"constant_memory": True})
     ws_summary = workbook.add_worksheet("Summary")
     summary_headers = ["Iter", "Crossover_Hz", "PhaseMargin_deg", "GainMargin_dB", "AnalysisTime_s"]
     for col, name in enumerate(summary_headers):

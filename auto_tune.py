@@ -24,9 +24,12 @@ import shutil
 import subprocess
 import cmath
 import math
+from collections import deque
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Tuple, List, Dict
+
+from ltspice_backend import LtspiceSimulationRunner, find_default_ltspice_exe, normalize_backend
 
 
 @dataclass
@@ -217,10 +220,24 @@ class TuningConfig:
     All Kp/Ki/Kd/Kf bounds are derived by sweeping wc and phi_m
     through the compensator design equations.
     """
+    sim_backend: str = os.environ.get("SIM_BACKEND", "ltspice")
     plecs_exe: str = os.environ.get("PLECS_EXE", r"C:\Users\liaom\Documents\Plexim\PLECS 5.0 (64 bit)\PLECS.exe")
     plecs_model: str = os.environ.get(
         "PLECS_MODEL",
         str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve()),
+    )
+    ltspice_exe: str = os.environ.get("LTSPICE_EXE", find_default_ltspice_exe())
+    ltspice_asc_model: str = os.environ.get(
+        "LTSPICE_ASC_MODEL",
+        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck.asc").resolve()),
+    )
+    ltspice_netlist_model: str = os.environ.get(
+        "LTSPICE_NETLIST_MODEL",
+        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_tran.cir").resolve()),
+    )
+    ltspice_bode_netlist_model: str = os.environ.get(
+        "LTSPICE_BODE_NETLIST_MODEL",
+        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_bode.cir").resolve()),
     )
     rpc_url: str = os.environ.get("PLECS_RPC_URL", 'http://127.0.0.1:1080/RPC2')
     model_id: str = "synchronous buck"
@@ -231,6 +248,10 @@ class TuningConfig:
     work_dir: str = os.environ.get(
         "PLECS_WORK_DIR",
         str((Path(__file__).resolve().parent / "plecs_tuning_work").resolve()),
+    )
+    ltspice_work_dir: str = os.environ.get(
+        "LTSPICE_WORK_DIR",
+        str((Path(__file__).resolve().parent / "ltspice_tuning_work").resolve()),
     )
     sim_time_span: str = "3e-3"
     load_pulse_frequency: str = "250"
@@ -248,7 +269,7 @@ class TuningConfig:
     bode_extraction_cycles: int = 30
     bode_coarse_num_points: int = 51
     bode_dense_num_points: int = 51
-    run_bode_analysis: bool = False
+    run_bode_analysis: bool = True
     # --- Design variable ranges ---
     # wc: crossover frequency (rad/s)
     #   min: LC resonance w0 ~ 47,140 rad/s (7.5 kHz)
@@ -273,6 +294,11 @@ class TuningConfig:
             osc_count <= self.max_oscillations and
             settling_time <= self.target_settling_time
         )
+
+    @property
+    def backend(self) -> str:
+        """Return the normalized simulation backend name."""
+        return normalize_backend(self.sim_backend)
 
 
 class PlecsRpc:
@@ -552,6 +578,27 @@ class ResponseAnalyzer:
         return result
 
     @staticmethod
+    def _sliding_extrema(vals: List[float], window: int, find_max: bool) -> List[float]:
+        """Return max/min values for each contiguous window in O(n)."""
+        if window <= 0 or len(vals) < window:
+            return []
+        q = deque()
+        result = []
+        for i, value in enumerate(vals):
+            while q and q[0] <= i - window:
+                q.popleft()
+            if find_max:
+                while q and vals[q[-1]] <= value:
+                    q.pop()
+            else:
+                while q and vals[q[-1]] >= value:
+                    q.pop()
+            q.append(i)
+            if i >= window - 1:
+                result.append(vals[q[0]])
+        return result
+
+    @staticmethod
     def _find_col(header: List[str], *keywords) -> int:
         for i, h in enumerate(header):
             hl = h.lower()
@@ -625,13 +672,20 @@ class ResponseAnalyzer:
         lc_period = 1.0 / 7500.0  # ~133 us
         half_n = max(5, int(lc_period / 4.0 / avg_dt))  # ~quarter LC period
 
-        # Find local maxima and minima with wide neighborhood
+        window_n = 2 * half_n + 1
+        if len(seg) < window_n:
+            return 0
+
+        window_max = self._sliding_extrema(seg, window_n, find_max=True)
+        window_min = self._sliding_extrema(seg, window_n, find_max=False)
+
+        # Find local maxima and minima with wide neighborhood.
         peaks, valleys = [], []  # (index, value)
         for i in range(half_n, len(seg) - half_n):
-            window = seg[i - half_n:i + half_n + 1]
-            if seg[i] == max(window):
+            window_idx = i - half_n
+            if seg[i] == window_max[window_idx]:
                 peaks.append((i, seg[i]))
-            elif seg[i] == min(window):
+            elif seg[i] == window_min[window_idx]:
                 valleys.append((i, seg[i]))
 
         # Deduplicate: keep only the most extreme peak/valley within each
@@ -721,14 +775,23 @@ class ResponseAnalyzer:
         v_band = self._compute_settling_band(vout_filt, settle_ref_start, end_idx)
         ripple_limit = self._compute_ripple_limit(vout_raw, settle_ref_start, end_idx, v_band)
         settle_start_idx = min(end_idx - 1, step_idx + max(check_block, int(5e-6 / max(avg_dt, 1e-12))))
+
+        suffix_max_filt = [float("-inf")] * (end_idx + 1)
+        suffix_min_filt = [float("inf")] * (end_idx + 1)
+        suffix_max_raw = [float("-inf")] * (end_idx + 1)
+        suffix_min_raw = [float("inf")] * (end_idx + 1)
+        for j in range(end_idx - 1, settle_start_idx - 1, -1):
+            suffix_max_filt[j] = max(vout_filt[j], suffix_max_filt[j + 1])
+            suffix_min_filt[j] = min(vout_filt[j], suffix_min_filt[j + 1])
+            suffix_max_raw[j] = max(vout_raw[j], suffix_max_raw[j + 1])
+            suffix_min_raw[j] = min(vout_raw[j], suffix_min_raw[j + 1])
+
         for i in range(settle_start_idx, max(settle_start_idx + 1, end_idx - check_block)):
-            filt_tail = vout_filt[i:end_idx]
-            raw_tail = vout_raw[i:end_idx]
             filt_in_band = (
-                max(filt_tail) <= self.v_target + v_band and
-                min(filt_tail) >= self.v_target - v_band
+                suffix_max_filt[i] <= self.v_target + v_band and
+                suffix_min_filt[i] >= self.v_target - v_band
             )
-            raw_ripple_ok = (max(raw_tail) - min(raw_tail)) <= ripple_limit
+            raw_ripple_ok = (suffix_max_raw[i] - suffix_min_raw[i]) <= ripple_limit
             if filt_in_band and raw_ripple_ok:
                 settling_time = time_vals[i] - step_t
                 break
@@ -1192,6 +1255,7 @@ class AutoTuner:
 
     def __init__(self, config: TuningConfig = None):
         self.config = config or TuningConfig()
+        self.backend = self.config.backend
         step_up_t = float(self.config.load_pulse_delay)
         step_down_t = step_up_t + float(self.config.load_pulse_duty_cycle) / float(self.config.load_pulse_frequency)
         self.plecs = PlecsRpc(
@@ -1200,6 +1264,7 @@ class AutoTuner:
             model_id=self.config.model_id
         )
         self.model_editor = PlecsModelEditor()
+        self.ltspice = LtspiceSimulationRunner(self.config)
         self.analyzer = ResponseAnalyzer(
             v_target=5.0,
             fsw=250e3,
@@ -1223,16 +1288,30 @@ class AutoTuner:
         self.plecs.set_parameter(f"{model_id}/1A Load", "Delay", self.config.load_pulse_delay)
 
     def setup(self) -> None:
-        """Initialize PLECS connection and results directory"""
+        """Initialize the selected simulation backend and results directory."""
         print("=" * 60)
-        print("PLECS Buck Converter PID Auto-Tuner")
+        print(f"{self.config.backend.upper()} Buck Converter PID Auto-Tuner")
         print("=" * 60)
 
         # Create results directory
         Path(self.config.results_dir).mkdir(parents=True, exist_ok=True)
 
+        self.backend = self.config.backend
+        if self.backend == "ltspice":
+            print("\n[1] Preparing LTspice working model...")
+            self.ltspice = LtspiceSimulationRunner(self.config)
+            self.work_model_path = self.ltspice.prepare_working_model()
+            print(f"  LTspice executable: {self.config.ltspice_exe or '(PyLTSpice default)'}")
+            print(f"  Opening working netlist copy: {self.work_model_path}")
+            return
+
         # Connect to PLECS (starts it if not running)
         print("\n[1] Connecting to PLECS...")
+        self.plecs = PlecsRpc(
+            self.config.rpc_url,
+            plecs_exe=self.config.plecs_exe,
+            model_id=self.config.model_id,
+        )
         self.plecs.ensure_plecs_running()
 
         self.work_model_path = self.model_editor.prepare_working_model(
@@ -1249,6 +1328,35 @@ class AutoTuner:
         """Run a single tuning iteration"""
         print(f"\n[Iteration {iter_num}]")
         print(f"  Parameters: Kp={Kp:.5f}, Ki={Ki:.2f}, Kd={Kd:.2e}, Kf={Kf:.0f}")
+
+        if self.config.backend == "ltspice":
+            print("  Running LTspice transient simulation...")
+            try:
+                header, data = self.ltspice.run_transient(iter_num, Kp, Ki, Kd, Kf)
+                if self.ltspice.work_netlist_path is not None:
+                    self.work_model_path = self.ltspice.work_netlist_path
+            except Exception as e:
+                print(f"  LTspice simulation/export error: {e}")
+                self.last_header = []
+                self.last_data = []
+                return TuningResult(iter_num, Kp, Ki, Kd, Kf, 10, 10, 5, 0.005, "FAIL")
+
+            self.last_header = header
+            self.last_data = data
+            overshoot, undershoot, osc_count, settling_time = self.analyzer.analyze(header, data)
+            status = "PASS" if self.config.meets_targets(overshoot, undershoot, osc_count, settling_time) else "FAIL"
+            result = TuningResult(
+                iter_num=iter_num,
+                Kp=Kp, Ki=Ki, Kd=Kd, Kf=Kf,
+                overshoot=overshoot,
+                undershoot=undershoot,
+                osc_count=osc_count,
+                settling_time=settling_time,
+                status=status,
+            )
+            print(f"  Results: OS={overshoot:.1f}%, US={undershoot:.1f}%, "
+                  f"Osc={osc_count}, Settling={settling_time*1000:.1f}ms -> {status}")
+            return result
 
         loaded_path = self.plecs.find_loaded_model_path(self.config.model_id)
 
@@ -1309,6 +1417,18 @@ class AutoTuner:
         best_result = select_best_result(self.results)
         with open(log_path, 'w', newline='') as f:
             writer = csv.writer(f)
+            writer.writerow(['Backend', 'ResultsDir', 'WorkModelPath'])
+            writer.writerow([self.config.backend, self.config.results_dir, str(self.work_model_path or '')])
+            writer.writerow([])
+            writer.writerow(['Targets', 'Overshoot', 'Undershoot', 'OscCount', 'SettlingTime'])
+            writer.writerow([
+                '',
+                self.config.target_overshoot,
+                self.config.target_undershoot,
+                self.config.max_oscillations,
+                self.config.target_settling_time,
+            ])
+            writer.writerow([])
             writer.writerow(['Iter', 'Kp', 'Ki', 'Kd', 'Kf',
                            'Overshoot', 'Undershoot', 'OscCount',
                            'SettlingTime', 'Status'])

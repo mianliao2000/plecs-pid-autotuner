@@ -1,6 +1,6 @@
-# PLECS Buck Converter PID Auto-Tuner
+# Buck Converter PID Auto-Tuner
 
-Automated PID tuning system for a synchronous buck converter simulated in PLECS. Uses analytical Type 3 compensator design to find optimal PID parameters by searching over two design variables — crossover frequency (`wc`) and phase margin (`phi_m`) — instead of searching through all four PID gains independently. After each time-domain simulation, a loop-gain Bode analysis is optionally run to measure the actual crossover frequency, phase margin, and gain margin.
+Automated PID tuning system for a synchronous buck converter simulated in either PLECS or LTspice. PLECS runs through XML-RPC against a disposable `.plecs` copy; LTspice runs through PyLTSpice against generated switching and AC companion netlists. The tuner uses analytical Type 3 compensator design to search over crossover frequency (`wc`) and phase margin (`phi_m`) instead of searching through all four PID gains independently.
 
 ---
 
@@ -53,7 +53,7 @@ plecs-pid-autotuner/
     │   ├── iter2.png         # ...
     │   ├── best_iteration.png
     │   ├── animation.gif
-    │   ├── data_time_iterations.xlsx   # Summary + per-iteration waveform data
+    │   ├── data_time_iterations.xlsx   # Summary + decimated per-iteration waveform data
     │   └── data_bode_iterations.xlsx  # Bode metrics + per-iteration frequency data
     └── ...                   # Up to 5 recent run folders are kept
 ```
@@ -314,15 +314,25 @@ Uses an adaptive band derived from the ripple amplitude at the tail of the analy
 
 ### Bode Analysis
 
-After each time-domain simulation, a loop-gain frequency response is optionally extracted using PLECS's built-in analysis tool:
+After each time-domain simulation, a loop-gain frequency response can optionally be extracted. PLECS uses the built-in analysis tool; LTspice uses the averaged AC companion netlist.
 
 1. The 1A load pulse generator is temporarily commented out (steady-state operating point)
-2. A coarse sweep ("Loop Gain (Frequency Response)") is run across the configured range
-3. A dense sweep ("Loop Gain (Peak Dense)") adds resolution around the crossover region
+2. A coarse sweep is run across the configured range
+3. A dense sweep adds resolution over the PLECS peak-dense range (`3e3` to `2e4` Hz)
 4. The two sweeps are merged and the following metrics are computed:
    - **fc** — gain crossover frequency (0 dB crossing)
    - **PM** — phase margin (180° + phase at fc)
    - **GM** — gain margin (–magnitude at –180° phase crossing)
+
+For LTspice, `Coarse Num Points` controls the full-range averaged AC sweep, while
+`Dense Num Points` controls the `3 kHz` to `20 kHz` dense sweep. The LTspice
+backend internally converts these values to `.ac dec` points-per-decade and
+uses extra density in the dense range so the resonant peak has enough samples.
+Because this is an averaged Laplace AC companion model, changing point counts
+usually changes the plotted point density more than the total analysis time;
+the Bode plot annotation and log show the final merged point count. Point-count
+changes apply to the next Bode run and do not recompute already stored
+iteration history.
 
 ---
 
@@ -378,7 +388,7 @@ Runs one simulation using the current PID spinbox values, then automatically com
 
 ### Model Safety
 
-The GUI and CLI do not write the source `.plecs` template during a run. Each run copies the model into `plecs_tuning_work/`, applies the current PID/Bode settings to that disposable copy, and loads the copy through PLECS RPC.
+The GUI and CLI do not write source model templates during a run. PLECS runs copy the `.plecs` file into `plecs_tuning_work/`; LTspice runs copy the `.asc` and `.cir` files into `ltspice_tuning_work/`. PID and Bode settings are applied only to those disposable working copies.
 
 ---
 
@@ -387,7 +397,8 @@ The GUI and CLI do not write the source `.plecs` template during a run. Each run
 ### Prerequisites
 
 - Python 3.10+
-- PLECS 5.0 (64-bit) installed at the path configured in `TuningConfig.plecs_exe`
+- PLECS 5.0 (64-bit), LTspice, or both, depending on the GUI backend selection
+- LTspice users need PyLTSpice from `requirements.txt`; the GUI auto-detects the common ADI install path and also honors `LTSPICE_EXE`
 - Python packages:
 
 ```
@@ -426,11 +437,17 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 
 | Field | Default | Description |
 |---|---|---|
+| `sim_backend` | `ltspice` | Selected backend: `plecs` or `ltspice` |
 | `plecs_exe` | PLECS 5.0 path | Path to PLECS executable |
 | `plecs_model` | `synchronous buck.plecs` | Source model file |
+| `ltspice_exe` | Auto-detected ADI path | Path to LTspice executable |
+| `ltspice_asc_model` | `ltspice/synchronous_buck.asc` | LTspice companion schematic |
+| `ltspice_netlist_model` | `ltspice/synchronous_buck_tran.cir` | LTspice switching transient netlist |
+| `ltspice_bode_netlist_model` | `ltspice/synchronous_buck_bode.cir` | LTspice averaged AC Bode netlist |
 | `rpc_url` | `http://127.0.0.1:1080/RPC2` | PLECS XML-RPC endpoint |
 | `results_dir` | `results/` | Root folder for run subfolders |
-| `work_dir` | `plecs_tuning_work/` | Disposable working model copies |
+| `work_dir` | `plecs_tuning_work/` | Disposable PLECS working model copies |
+| `ltspice_work_dir` | `ltspice_tuning_work/` | Disposable LTspice working model copies |
 | `sim_time_span` | `3e-3` | Simulation duration (s) |
 | `load_pulse_frequency` | `250` | Load pulse frequency (Hz) |
 | `load_pulse_duty_cycle` | `0.25` | Load pulse duty cycle |
@@ -454,7 +471,7 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 
 The default starting point (wc = 15 kHz, phi_m = 30°) is intentionally poor — near resonance with low damping — to demonstrate the tuner's ability to recover. A good nominal starting point would be wc = 25 kHz, phi_m = 60°.
 
-The path-like defaults can also be overridden with environment variables: `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, and `PLECS_WORK_DIR`.
+The path-like defaults can also be overridden with environment variables: `SIM_BACKEND`, `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, `PLECS_WORK_DIR`, `LTSPICE_EXE`, `LTSPICE_ASC_MODEL`, `LTSPICE_NETLIST_MODEL`, `LTSPICE_BODE_NETLIST_MODEL`, and `LTSPICE_WORK_DIR`.
 
 ---
 
@@ -467,5 +484,5 @@ Each auto-tune or single-iteration run writes into a timestamped subfolder under
 | `results/figures_MMDD_HHMM/iter{N}.png` | Side-by-side waveform + Bode plot for iteration N |
 | `results/figures_MMDD_HHMM/best_iteration.png` | Copy of the best iteration frame |
 | `results/figures_MMDD_HHMM/animation.gif` | Animated waveform evolution |
-| `results/figures_MMDD_HHMM/data_time_iterations.xlsx` | Summary sheet + per-iteration waveform data (Time, IL, Vout) |
+| `results/figures_MMDD_HHMM/data_time_iterations.xlsx` | Summary sheet + decimated per-iteration waveform data (Time, IL, Vout) |
 | `results/figures_MMDD_HHMM/data_bode_iterations.xlsx` | Bode summary (fc, PM, GM) + per-iteration frequency response data |
