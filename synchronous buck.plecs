@@ -31,8 +31,8 @@ Plecs {
   InitializationCommands "% ================================\n% Plant paramete"
 "rs\n% ================================\nVdc  = 12;\nVout = 5;\nCout = 15e-6;"
 "\nRc   = 7.5e-3;\nL    = 30e-6;\nRl   = 50e-3;\n\nfsw = 250e3;          % Swi"
-"tching frequency (Hz)\ntd  = 20e-9;          % Dead-time (s)\n\nKp = 0.051311"
-";\nKi = 250.8;\nKd = 2.593e-06;\nKf = 884901.0;\n\n\n\n"
+"tching frequency (Hz)\ntd  = 20e-9;          % Dead-time (s)\n\nKp = 0.166507"
+";\nKi = 1419.38;\nKd = 1.586e-06;\nKf = 156357;\n\n\n\n"
   InitialState  "1"
   SystemState   ""
   JacobianComputation "2"
@@ -1430,35 +1430,64 @@ Plecs {
   }
   Script {
     Name          "Script"
-    Script        "% GUI_METADATA_BEGIN\r\n% wc_rad_per_s = 94248\r\n% phi_m_d"
+    Script        "% GUI_METADATA_BEGIN
+% wc_rad_per_s = 94248
+% phi_m_deg = 30
+% target_os_pct = 4
+% target_us_pct = 4
+% max_osc = 0
+% max_ts_ms = 0.1
+% max_iter = 40
+% run_bode_analysis = 1
+% bode_start_hz = 1000
+% bode_stop_hz = 100000
+% bode_extraction_cycles = 30
+% bode_coarse_points = 51
+% bode_dense_points = 51
+% GUI_METADATA_END"
 "eg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% m"
 "ax_ts_ms = 0.1\r\n% max_iter = 40\r\n% run_bode_analysis = 1\r\n% bode_start_"
 "hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_extraction_cycles = 30\r\n% bo"
 "de_coarse_points = 51\r\n% bode_dense_points = 51\r\n% GUI_METADATA_ENDeg = 3"
 "0\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_"
-"ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1"
-"000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg "
-"= 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_"
-"ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz "
-"= 1000\r\n% bode_stop_hz = 10000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDe"
-"g = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% ma"
-"x_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_h"
-"z = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_EN"
-"Deg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% "
-"max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start"
-"_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA"
-"_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r"
-"\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_s"
-"tart_hz = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METAD"
-"ATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0"
-"\r\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode"
-"_start_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_ME"
-"TADATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc "
-"= 0\r\n% max_ts_ms = 0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% b"
-"ode_start_hz = 100\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_"
-"METADATA_ENDeg = 30\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_os"
-"c = 0\r\n% max_ts_ms = 0.15\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n"
-"% bode_start_hz = 1000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% "
-"GUI_METADATA_END"
+"ms = 0.1\r\n% max_iter = 40\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1"
+"000\r\n% bode_stop_hz = 100000\r\n% bode_extraction_cycles = 30\r\n% bode_coa"
+"rse_points = 51\r\n% bode_dense_points = 51\r\n% GUI_METADATA_ENDeg = 30\r\n%"
+" target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0"
+".1\r\n% max_iter = 40\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r"
+"\n% bode_stop_hz = 100000\r\n% bode_extraction_cycles = 30\r\n% bode_coarse_p"
+"oints = 51\r\n% bode_dense_points = 51\r\n% GUI_METADATA_ENDeg = 30\r\n% targ"
+"et_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r"
+"\n% max_iter = 40\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r\n% b"
+"ode_stop_hz = 100000\r\n% bode_extraction_cycles = 30\r\n% bode_coarse_points"
+" = 51\r\n% bode_dense_points = 51\r\n% GUI_METADATA_ENDeg = 30\r\n% target_os"
+"_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r\n% ma"
+"x_iter = 40\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r\n% bode_st"
+"op_hz = 100000\r\n% bode_extraction_cycles = 30\r\n% bode_coarse_points = 51"
+"\r\n% bode_dense_points = 51\r\n% GUI_METADATA_ENDeg = 30\r\n% target_os_pct "
+"= 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r\n% max_ite"
+"r = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r\n% bode_stop_hz"
+" = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30\r\n% target_os_p"
+"ct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r\n% max_"
+"iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r\n% bode_stop"
+"_hz = 10000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30\r\n% target_os"
+"_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r\n% ma"
+"x_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 100\r\n% bode_sto"
+"p_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30\r\n% target_"
+"os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r\n% "
+"max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r\n% bode_"
+"stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30\r\n% targ"
+"et_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1\r"
+"\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 100\r\n% bo"
+"de_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30\r\n% t"
+"arget_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = 0.1"
+"\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1000\r\n%"
+" bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30\r\n"
+"% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_ms = "
+"0.1\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 100\r"
+"\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_ENDeg = 30"
+"\r\n% target_os_pct = 4\r\n% target_us_pct = 4\r\n% max_osc = 0\r\n% max_ts_m"
+"s = 0.15\r\n% max_iter = 50\r\n% run_bode_analysis = 1\r\n% bode_start_hz = 1"
+"000\r\n% bode_stop_hz = 100000\r\n% bode_points = 31\r\n% GUI_METADATA_END"
   }
 }
