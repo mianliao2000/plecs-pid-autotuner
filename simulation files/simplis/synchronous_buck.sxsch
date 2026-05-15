@@ -1,0 +1,1810 @@
+SIMetrixFile type=schematic format=1.0 revision=9
+.Component
+.Schematic
+.SymbolLibrary
+.EndSymbolLibrary
+.StyleLibrary
+.EndStyleLibrary
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=-1560
+TextInfo text="Synchronous Buck Converter - SIMPLIS readable schematic"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-1560 x=-2040 orient="N0"
+Property name="value" value="Synchronous Buck Converter - SIMPLIS readable schematic" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=-1320
+TextInfo text="Visual schematic with wide spacing. Automation runs synchronous_buck_tran.net."
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-1320 x=-2040 orient="N0"
+Property name="value" value="Visual schematic with wide spacing. Automation runs synchronous_buck_tran.net." x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=-960
+TextInfo text="Input"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-960 x=-2040 orient="N0"
+Property name="value" value="Input" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-2040 y1=-720 x2=-1680 y2=-720
+.Wire
+Attributes x1=-2040 y1=-720 x2=-1680 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1680 y1=-720 x2=-1680 y2=-300
+.Wire
+Attributes x1=-1680 y1=-720 x2=-1680 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1680 y1=-300 x2=-2040 y2=-300
+.Wire
+Attributes x1=-1680 y1=-300 x2=-2040 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-2040 y1=-300 x2=-2040 y2=-720
+.Wire
+Attributes x1=-2040 y1=-300 x2=-2040 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-1980 y=-660
+TextInfo text="VDC"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=-1980 orient="N0"
+Property name="value" value="VDC" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1980 y=-510
+TextInfo text="12"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=-1980 orient="N0"
+Property name="value" value="12" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1980 y=-360
+TextInfo text="vin to 0"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=-1980 orient="N0"
+Property name="value" value="vin to 0" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-1560 y1=-720 x2=-1200 y2=-720
+.Wire
+Attributes x1=-1560 y1=-720 x2=-1200 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1200 y1=-720 x2=-1200 y2=-300
+.Wire
+Attributes x1=-1200 y1=-720 x2=-1200 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1200 y1=-300 x2=-1560 y2=-300
+.Wire
+Attributes x1=-1200 y1=-300 x2=-1560 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1560 y1=-300 x2=-1560 y2=-720
+.Wire
+Attributes x1=-1560 y1=-300 x2=-1560 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-1500 y=-660
+TextInfo text="Cin"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=-1500 orient="N0"
+Property name="value" value="Cin" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1500 y=-510
+TextInfo text="not in SIMPLIS netlist"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=-1500 orient="N0"
+Property name="value" value="not in SIMPLIS netlist" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1500 y=-360
+TextInfo text="visual input bypass"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=-1500 orient="N0"
+Property name="value" value="visual input bypass" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-960 y=-960
+TextInfo text="Synchronous half bridge"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-960 x=-960 orient="N0"
+Property name="value" value="Synchronous half bridge" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-960 y1=-720 x2=-540 y2=-720
+.Wire
+Attributes x1=-960 y1=-720 x2=-540 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-540 y1=-720 x2=-540 y2=-300
+.Wire
+Attributes x1=-540 y1=-720 x2=-540 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-540 y1=-300 x2=-960 y2=-300
+.Wire
+Attributes x1=-540 y1=-300 x2=-960 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-960 y1=-300 x2=-960 y2=-720
+.Wire
+Attributes x1=-960 y1=-300 x2=-960 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-900 y=-660
+TextInfo text="S_HI"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=-900 orient="N0"
+Property name="value" value="S_HI" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-900 y=-510
+TextInfo text="swhi IC=CLOSE"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=-900 orient="N0"
+Property name="value" value="swhi IC=CLOSE" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-900 y=-360
+TextInfo text="vin to sw; ctrl/ramp"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=-900 orient="N0"
+Property name="value" value="vin to sw; ctrl/ramp" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-960 y1=-180 x2=-540 y2=-180
+.Wire
+Attributes x1=-960 y1=-180 x2=-540 y2=-180
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-540 y1=-180 x2=-540 y2=240
+.Wire
+Attributes x1=-540 y1=-180 x2=-540 y2=240
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-540 y1=240 x2=-960 y2=240
+.Wire
+Attributes x1=-540 y1=240 x2=-960 y2=240
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-960 y1=240 x2=-960 y2=-180
+.Wire
+Attributes x1=-960 y1=240 x2=-960 y2=-180
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-900 y=-120
+TextInfo text="S_LO"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-120 x=-900 orient="N0"
+Property name="value" value="S_LO" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-900 y=30
+TextInfo text="swlo IC=OPEN"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=30 x=-900 orient="N0"
+Property name="value" value="swlo IC=OPEN" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-900 y=180
+TextInfo text="sw to 0; ramp/ctrl"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=180 x=-900 orient="N0"
+Property name="value" value="sw to 0; ramp/ctrl" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-420 y1=-720 x2=-60 y2=-720
+.Wire
+Attributes x1=-420 y1=-720 x2=-60 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-60 y1=-720 x2=-60 y2=-300
+.Wire
+Attributes x1=-60 y1=-720 x2=-60 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-60 y1=-300 x2=-420 y2=-300
+.Wire
+Attributes x1=-60 y1=-300 x2=-420 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-420 y1=-300 x2=-420 y2=-720
+.Wire
+Attributes x1=-420 y1=-300 x2=-420 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-360 y=-660
+TextInfo text="D_HI"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=-360 orient="N0"
+Property name="value" value="D_HI" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-360 y=-510
+TextInfo text="body_diode"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=-360 orient="N0"
+Property name="value" value="body_diode" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-360 y=-360
+TextInfo text="sw to vin"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=-360 orient="N0"
+Property name="value" value="sw to vin" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-420 y1=-180 x2=-60 y2=-180
+.Wire
+Attributes x1=-420 y1=-180 x2=-60 y2=-180
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-60 y1=-180 x2=-60 y2=240
+.Wire
+Attributes x1=-60 y1=-180 x2=-60 y2=240
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-60 y1=240 x2=-420 y2=240
+.Wire
+Attributes x1=-60 y1=240 x2=-420 y2=240
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-420 y1=240 x2=-420 y2=-180
+.Wire
+Attributes x1=-420 y1=240 x2=-420 y2=-180
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-360 y=-120
+TextInfo text="D_LO"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-120 x=-360 orient="N0"
+Property name="value" value="D_LO" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-360 y=30
+TextInfo text="body_diode"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=30 x=-360 orient="N0"
+Property name="value" value="body_diode" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-360 y=180
+TextInfo text="0 to sw"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=180 x=-360 orient="N0"
+Property name="value" value="0 to sw" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=240 y=-960
+TextInfo text="Output filter"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-960 x=240 orient="N0"
+Property name="value" value="Output filter" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=240 y1=-720 x2=600 y2=-720
+.Wire
+Attributes x1=240 y1=-720 x2=600 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=600 y1=-720 x2=600 y2=-300
+.Wire
+Attributes x1=600 y1=-720 x2=600 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=600 y1=-300 x2=240 y2=-300
+.Wire
+Attributes x1=600 y1=-300 x2=240 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=240 y1=-300 x2=240 y2=-720
+.Wire
+Attributes x1=240 y1=-300 x2=240 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=300 y=-660
+TextInfo text="L1"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=300 orient="N0"
+Property name="value" value="L1" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=300 y=-510
+TextInfo text="30u"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=300 orient="N0"
+Property name="value" value="30u" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=300 y=-360
+TextInfo text="sw to lx"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=300 orient="N0"
+Property name="value" value="sw to lx" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=720 y1=-720 x2=1080 y2=-720
+.Wire
+Attributes x1=720 y1=-720 x2=1080 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1080 y1=-720 x2=1080 y2=-300
+.Wire
+Attributes x1=1080 y1=-720 x2=1080 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1080 y1=-300 x2=720 y2=-300
+.Wire
+Attributes x1=1080 y1=-300 x2=720 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=720 y1=-300 x2=720 y2=-720
+.Wire
+Attributes x1=720 y1=-300 x2=720 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=780 y=-660
+TextInfo text="Rl"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=780 orient="N0"
+Property name="value" value="Rl" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=780 y=-510
+TextInfo text="50m"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=780 orient="N0"
+Property name="value" value="50m" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=780 y=-360
+TextInfo text="lx to vout"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=780 orient="N0"
+Property name="value" value="lx to vout" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=1200 y1=-720 x2=1560 y2=-720
+.Wire
+Attributes x1=1200 y1=-720 x2=1560 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1560 y1=-720 x2=1560 y2=-300
+.Wire
+Attributes x1=1560 y1=-720 x2=1560 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1560 y1=-300 x2=1200 y2=-300
+.Wire
+Attributes x1=1560 y1=-300 x2=1200 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1200 y1=-300 x2=1200 y2=-720
+.Wire
+Attributes x1=1200 y1=-300 x2=1200 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=1260 y=-660
+TextInfo text="Rc"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=1260 orient="N0"
+Property name="value" value="Rc" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1260 y=-510
+TextInfo text="7.5m"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=1260 orient="N0"
+Property name="value" value="7.5m" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1260 y=-360
+TextInfo text="ncap to vout"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=1260 orient="N0"
+Property name="value" value="ncap to vout" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=1680 y1=-720 x2=2040 y2=-720
+.Wire
+Attributes x1=1680 y1=-720 x2=2040 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2040 y1=-720 x2=2040 y2=-300
+.Wire
+Attributes x1=2040 y1=-720 x2=2040 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2040 y1=-300 x2=1680 y2=-300
+.Wire
+Attributes x1=2040 y1=-300 x2=1680 y2=-300
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1680 y1=-300 x2=1680 y2=-720
+.Wire
+Attributes x1=1680 y1=-300 x2=1680 y2=-720
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=1740 y=-660
+TextInfo text="Cout"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-660 x=1740 orient="N0"
+Property name="value" value="Cout" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1740 y=-510
+TextInfo text="15u"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-510 x=1740 orient="N0"
+Property name="value" value="15u" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1740 y=-360
+TextInfo text="ncap to 0"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-360 x=1740 orient="N0"
+Property name="value" value="ncap to 0" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=240 y=-180
+TextInfo text="Load step"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=-180 x=240 orient="N0"
+Property name="value" value="Load step" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=240 y1=60 x2=600 y2=60
+.Wire
+Attributes x1=240 y1=60 x2=600 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=600 y1=60 x2=600 y2=480
+.Wire
+Attributes x1=600 y1=60 x2=600 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=600 y1=480 x2=240 y2=480
+.Wire
+Attributes x1=600 y1=480 x2=240 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=240 y1=480 x2=240 y2=60
+.Wire
+Attributes x1=240 y1=480 x2=240 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=300 y=120
+TextInfo text="RLOAD"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=120 x=300 orient="N0"
+Property name="value" value="RLOAD" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=300 y=270
+TextInfo text="5"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=270 x=300 orient="N0"
+Property name="value" value="5" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=300 y=420
+TextInfo text="vout to 0"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=420 x=300 orient="N0"
+Property name="value" value="vout to 0" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=720 y1=60 x2=1140 y2=60
+.Wire
+Attributes x1=720 y1=60 x2=1140 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1140 y1=60 x2=1140 y2=480
+.Wire
+Attributes x1=1140 y1=60 x2=1140 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1140 y1=480 x2=720 y2=480
+.Wire
+Attributes x1=1140 y1=480 x2=720 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=720 y1=480 x2=720 y2=60
+.Wire
+Attributes x1=720 y1=480 x2=720 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=780 y=120
+TextInfo text="S_LOAD"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=120 x=780 orient="N0"
+Property name="value" value="S_LOAD" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=780 y=270
+TextInfo text="loadsw IC=OPEN"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=270 x=780 orient="N0"
+Property name="value" value="loadsw IC=OPEN" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=780 y=420
+TextInfo text="vout to nload; load_ctl"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=420 x=780 orient="N0"
+Property name="value" value="vout to nload; load_ctl" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=1260 y1=60 x2=1620 y2=60
+.Wire
+Attributes x1=1260 y1=60 x2=1620 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1620 y1=60 x2=1620 y2=480
+.Wire
+Attributes x1=1620 y1=60 x2=1620 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1620 y1=480 x2=1260 y2=480
+.Wire
+Attributes x1=1620 y1=480 x2=1260 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1260 y1=480 x2=1260 y2=60
+.Wire
+Attributes x1=1260 y1=480 x2=1260 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=1320 y=120
+TextInfo text="RSTEP"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=120 x=1320 orient="N0"
+Property name="value" value="RSTEP" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1320 y=270
+TextInfo text="5"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=270 x=1320 orient="N0"
+Property name="value" value="5" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1320 y=420
+TextInfo text="nload to 0"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=420 x=1320 orient="N0"
+Property name="value" value="nload to 0" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=1740 y1=60 x2=2160 y2=60
+.Wire
+Attributes x1=1740 y1=60 x2=2160 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2160 y1=60 x2=2160 y2=480
+.Wire
+Attributes x1=2160 y1=60 x2=2160 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2160 y1=480 x2=1740 y2=480
+.Wire
+Attributes x1=2160 y1=480 x2=1740 y2=480
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1740 y1=480 x2=1740 y2=60
+.Wire
+Attributes x1=1740 y1=480 x2=1740 y2=60
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=1800 y=120
+TextInfo text="VLOADCTL"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=120 x=1800 orient="N0"
+Property name="value" value="VLOADCTL" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1800 y=270
+TextInfo text="PUL"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=270 x=1800 orient="N0"
+Property name="value" value="PUL" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1800 y=420
+TextInfo text="load_ctl timing"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=420 x=1800 orient="N0"
+Property name="value" value="load_ctl timing" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=720
+TextInfo text="PWM and compensator"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=720 x=-2040 orient="N0"
+Property name="value" value="PWM and compensator" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-2040 y1=960 x2=-1680 y2=960
+.Wire
+Attributes x1=-2040 y1=960 x2=-1680 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1680 y1=960 x2=-1680 y2=1380
+.Wire
+Attributes x1=-1680 y1=960 x2=-1680 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1680 y1=1380 x2=-2040 y2=1380
+.Wire
+Attributes x1=-1680 y1=1380 x2=-2040 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-2040 y1=1380 x2=-2040 y2=960
+.Wire
+Attributes x1=-2040 y1=1380 x2=-2040 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-1980 y=1020
+TextInfo text="VRAMP"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=-1980 orient="N0"
+Property name="value" value="VRAMP" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1980 y=1170
+TextInfo text="250k SAW"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=-1980 orient="N0"
+Property name="value" value="250k SAW" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1980 y=1320
+TextInfo text="ramp"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=-1980 orient="N0"
+Property name="value" value="ramp" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-1560 y1=960 x2=-1200 y2=960
+.Wire
+Attributes x1=-1560 y1=960 x2=-1200 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1200 y1=960 x2=-1200 y2=1380
+.Wire
+Attributes x1=-1200 y1=960 x2=-1200 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1200 y1=1380 x2=-1560 y2=1380
+.Wire
+Attributes x1=-1200 y1=1380 x2=-1560 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1560 y1=1380 x2=-1560 y2=960
+.Wire
+Attributes x1=-1560 y1=1380 x2=-1560 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-1500 y=1020
+TextInfo text="VREF"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=-1500 orient="N0"
+Property name="value" value="VREF" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1500 y=1170
+TextInfo text="5"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=-1500 orient="N0"
+Property name="value" value="5" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1500 y=1320
+TextInfo text="vref"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=-1500 orient="N0"
+Property name="value" value="vref" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-1080 y1=960 x2=-660 y2=960
+.Wire
+Attributes x1=-1080 y1=960 x2=-660 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-660 y1=960 x2=-660 y2=1380
+.Wire
+Attributes x1=-660 y1=960 x2=-660 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-660 y1=1380 x2=-1080 y2=1380
+.Wire
+Attributes x1=-660 y1=1380 x2=-1080 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-1080 y1=1380 x2=-1080 y2=960
+.Wire
+Attributes x1=-1080 y1=1380 x2=-1080 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-1020 y=1020
+TextInfo text="EERR"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=-1020 orient="N0"
+Property name="value" value="EERR" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1020 y=1170
+TextInfo text="Vref - Vout"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=-1020 orient="N0"
+Property name="value" value="Vref - Vout" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-1020 y=1320
+TextInfo text="vref, vout to err"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=-1020 orient="N0"
+Property name="value" value="vref, vout to err" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=-540 y1=960 x2=-120 y2=960
+.Wire
+Attributes x1=-540 y1=960 x2=-120 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-120 y1=960 x2=-120 y2=1380
+.Wire
+Attributes x1=-120 y1=960 x2=-120 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-120 y1=1380 x2=-540 y2=1380
+.Wire
+Attributes x1=-120 y1=1380 x2=-540 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=-540 y1=1380 x2=-540 y2=960
+.Wire
+Attributes x1=-540 y1=1380 x2=-540 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=-480 y=1020
+TextInfo text="GINT"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=-480 orient="N0"
+Property name="value" value="GINT" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-480 y=1170
+TextInfo text="Ki=1419.38"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=-480 orient="N0"
+Property name="value" value="Ki=1419.38" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-480 y=1320
+TextInfo text="err to int"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=-480 orient="N0"
+Property name="value" value="err to int" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=0 y1=960 x2=360 y2=960
+.Wire
+Attributes x1=0 y1=960 x2=360 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=360 y1=960 x2=360 y2=1380
+.Wire
+Attributes x1=360 y1=960 x2=360 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=360 y1=1380 x2=0 y2=1380
+.Wire
+Attributes x1=360 y1=1380 x2=0 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=0 y1=1380 x2=0 y2=960
+.Wire
+Attributes x1=0 y1=1380 x2=0 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=60 y=1020
+TextInfo text="CINT"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=60 orient="N0"
+Property name="value" value="CINT" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=60 y=1170
+TextInfo text="1"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=60 orient="N0"
+Property name="value" value="1" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=60 y=1320
+TextInfo text="int state"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=60 orient="N0"
+Property name="value" value="int state" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=480 y1=960 x2=840 y2=960
+.Wire
+Attributes x1=480 y1=960 x2=840 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=840 y1=960 x2=840 y2=1380
+.Wire
+Attributes x1=840 y1=960 x2=840 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=840 y1=1380 x2=480 y2=1380
+.Wire
+Attributes x1=840 y1=1380 x2=480 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=480 y1=1380 x2=480 y2=960
+.Wire
+Attributes x1=480 y1=1380 x2=480 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=540 y=1020
+TextInfo text="RINT"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=540 orient="N0"
+Property name="value" value="RINT" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=540 y=1170
+TextInfo text="1G"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=540 orient="N0"
+Property name="value" value="1G" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=540 y=1320
+TextInfo text="int leak"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=540 orient="N0"
+Property name="value" value="int leak" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=960 y1=960 x2=1380 y2=960
+.Wire
+Attributes x1=960 y1=960 x2=1380 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1380 y1=960 x2=1380 y2=1380
+.Wire
+Attributes x1=1380 y1=960 x2=1380 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1380 y1=1380 x2=960 y2=1380
+.Wire
+Attributes x1=1380 y1=1380 x2=960 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=960 y1=1380 x2=960 y2=960
+.Wire
+Attributes x1=960 y1=1380 x2=960 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=1020 y=1020
+TextInfo text="GEF"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=1020 orient="N0"
+Property name="value" value="GEF" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1020 y=1170
+TextInfo text="Kf=156357"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=1020 orient="N0"
+Property name="value" value="Kf=156357" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1020 y=1320
+TextInfo text="err-ef to ef"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=1020 orient="N0"
+Property name="value" value="err-ef to ef" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=1500 y1=960 x2=1860 y2=960
+.Wire
+Attributes x1=1500 y1=960 x2=1860 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1860 y1=960 x2=1860 y2=1380
+.Wire
+Attributes x1=1860 y1=960 x2=1860 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1860 y1=1380 x2=1500 y2=1380
+.Wire
+Attributes x1=1860 y1=1380 x2=1500 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1500 y1=1380 x2=1500 y2=960
+.Wire
+Attributes x1=1500 y1=1380 x2=1500 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=1560 y=1020
+TextInfo text="CEF"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=1560 orient="N0"
+Property name="value" value="CEF" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1560 y=1170
+TextInfo text="1"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=1560 orient="N0"
+Property name="value" value="1" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=1560 y=1320
+TextInfo text="ef state"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=1560 orient="N0"
+Property name="value" value="ef state" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=1980 y1=960 x2=2500 y2=960
+.Wire
+Attributes x1=1980 y1=960 x2=2500 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2500 y1=960 x2=2500 y2=1380
+.Wire
+Attributes x1=2500 y1=960 x2=2500 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2500 y1=1380 x2=1980 y2=1380
+.Wire
+Attributes x1=2500 y1=1380 x2=1980 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=1980 y1=1380 x2=1980 y2=960
+.Wire
+Attributes x1=1980 y1=1380 x2=1980 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=2040 y=1020
+TextInfo text="E_KP/E_INT/E_DER"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=2040 orient="N0"
+Property name="value" value="E_KP/E_INT/E_DER" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2040 y=1170
+TextInfo text="PID sum"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=2040 orient="N0"
+Property name="value" value="PID sum" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2040 y=1320
+TextInfo text="err, int, ef to ctrl"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=2040 orient="N0"
+Property name="value" value="err, int, ef to ctrl" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=2640 y1=960 x2=3000 y2=960
+.Wire
+Attributes x1=2640 y1=960 x2=3000 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=3000 y1=960 x2=3000 y2=1380
+.Wire
+Attributes x1=3000 y1=960 x2=3000 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=3000 y1=1380 x2=2640 y2=1380
+.Wire
+Attributes x1=3000 y1=1380 x2=2640 y2=1380
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2640 y1=1380 x2=2640 y2=960
+.Wire
+Attributes x1=2640 y1=1380 x2=2640 y2=960
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=2700 y=1020
+TextInfo text="RCTRL"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1020 x=2700 orient="N0"
+Property name="value" value="RCTRL" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2700 y=1170
+TextInfo text="1G"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1170 x=2700 orient="N0"
+Property name="value" value="1G" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2700 y=1320
+TextInfo text="ctrl to 0"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1320 x=2700 orient="N0"
+Property name="value" value="ctrl to 0" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=2640 y1=360 x2=3060 y2=360
+.Wire
+Attributes x1=2640 y1=360 x2=3060 y2=360
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=3060 y1=360 x2=3060 y2=780
+.Wire
+Attributes x1=3060 y1=360 x2=3060 y2=780
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=3060 y1=780 x2=2640 y2=780
+.Wire
+Attributes x1=3060 y1=780 x2=2640 y2=780
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2640 y1=780 x2=2640 y2=360
+.Wire
+Attributes x1=2640 y1=780 x2=2640 y2=360
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=2700 y=420
+TextInfo text="Bgatehi"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=420 x=2700 orient="N0"
+Property name="value" value="Bgatehi" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2700 y=570
+TextInfo text="ctrl > ramp"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=570 x=2700 orient="N0"
+Property name="value" value="ctrl > ramp" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2700 y=720
+TextInfo text="gate_hi"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=720 x=2700 orient="N0"
+Property name="value" value="gate_hi" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Wire x1=2640 y1=1560 x2=3060 y2=1560
+.Wire
+Attributes x1=2640 y1=1560 x2=3060 y2=1560
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=3060 y1=1560 x2=3060 y2=1980
+.Wire
+Attributes x1=3060 y1=1560 x2=3060 y2=1980
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=3060 y1=1980 x2=2640 y2=1980
+.Wire
+Attributes x1=3060 y1=1980 x2=2640 y2=1980
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+Wire x1=2640 y1=1980 x2=2640 y2=1560
+.Wire
+Attributes x1=2640 y1=1980 x2=2640 y2=1560
+Property name="StyleNormal" value="DefaultWire" visible=0
+Property name="StyleSelected" value="DefaultSelected" visible=0
+.EndWire
+.TextAnnotation
+Attributes orient="N0" x=2700 y=1620
+TextInfo text="Bgatelo"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1620 x=2700 orient="N0"
+Property name="value" value="Bgatelo" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2700 y=1770
+TextInfo text="ctrl < ramp"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1770 x=2700 orient="N0"
+Property name="value" value="ctrl < ramp" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=2700 y=1920
+TextInfo text="gate_lo"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=1920 x=2700 orient="N0"
+Property name="value" value="gate_lo" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=2280
+TextInfo text="Full formulas are in synchronous_buck_tran.net:"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=2280 x=-2040 orient="N0"
+Property name="value" value="Full formulas are in synchronous_buck_tran.net:" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=2520
+TextInfo text="err=Vout_ref-Vout, int'=Ki*err, ef'=Kf*(err-ef), ctrl=Kp*err+int+Kd*Kf*(err-ef)"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=2520 x=-2040 orient="N0"
+Property name="value" value="err=Vout_ref-Vout, int'=Ki*err, ef'=Kf*(err-ef), ctrl=Kp*err+int+Kd*Kf*(err-ef)" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=2880
+TextInfo text=".include synchronous_buck_tran.net"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=2880 x=-2040 orient="N0"
+Property name="value" value=".include synchronous_buck_tran.net" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=3120
+TextInfo text="Visual schematic only: the .net file is the single source of truth for simulation."
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=3120 x=-2040 orient="N0"
+Property name="value" value="Visual schematic only: the .net file is the single source of truth for simulation." x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+.TextAnnotation
+Attributes orient="N0" x=-2040 y=3360
+TextInfo text="Node aliases: 1=vin, 2=sw, 3=vout, 4=ncap, 5=lx, 10=vref, 11=err, 12=int, 13=ef, 16=ctrl, 17=ramp, 40=load_ctl, 41=nload"
+Property name="StyleNormal" value="DefaultAnnotation" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="StyleSelected" value="DefaultSelected" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+Property name="TextAlignment" value="AlignLeft" autopos=1 normal="Left" rotated="Left" visible=0 font="Default"
+.EndTextAnnotation
+--SXVERSION1.5
+.Instance
+Attributes type="symbol" name="Free_text" y=3360 x=-2040 orient="N0"
+Property name="value" value="Node aliases: 1=vin, 2=sw, 3=vout, 4=ncap, 5=lx, 10=vref, 11=err, 12=int, 13=ef, 16=ctrl, 17=ramp, 40=load_ctl, 41=nload" x=0 y=156 align="LeftBase" selectable=1 font="FreeText"
+.EndInstance
+--EndSXVERSION1.5
+Text value=""
+LicenseInfo version="9.10a" feats="Schematic|SIMPLIS_IF|Scripts|Sim" serial="unknown" user="unknown" code="unknown" binarch="x64" system="WINNT" product="SIMetrix/SIMPLIS"
+SimulatorMode value="simplis"
+View x=0 y=0 snapgrid=120 offsetx=0 offsety=0 zoomlevel=31 zoom=9
+Property name="CreateProduct" value="SIMetrix/SIMPLIS" type="value"
+Property name="UserVersion" value=0 type="value"
+Property name="WriteLog" value="0/0" type="value"
+.EndSchematic
+.EndComponent

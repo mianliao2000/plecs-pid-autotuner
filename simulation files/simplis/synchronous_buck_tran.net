@@ -1,0 +1,83 @@
+* SIMPLIS transient companion netlist for the Buck PID Auto-Tuner
+* The paired visual schematic is synchronous_buck.sxsch. This deck is the
+* automation source patched by simplis_backend.py before each iteration.
+* It intentionally mirrors the PLECS/LTspice example parameter names.
+
+.SIMULATOR SIMPLIS
+.VAR Vdc=12
+.VAR Vout=5
+.VAR fsw=250k
+.VAR Ts={1/fsw}
+.VAR dead=20n
+.VAR dead_frac={dead/Ts}
+.VAR Lval=30u
+.VAR Rl=50m
+.VAR Cout=15u
+.VAR Rc=7.5m
+.VAR Rload=5
+.VAR Kp=0.166507
+.VAR Ki=1419.38
+.VAR Kd=1.586e-6
+.VAR Kf=156357
+.VAR tstop=3e-3
+.VAR load_freq=250
+.VAR load_duty=0.25
+.VAR load_delay=1e-3
+.OPTIONS PSP_NPT=3001 PSP_START=0 PSP_END={tstop}
+
+* SIMPLIS external netlists require numeric node names. The visual schematic
+* uses friendly net names; this deck maps the output node back to VOUT for
+* exported vector names.
+* 0 = ground, 1 = input rail, 2 = switching node, 3 = VOUT, 4 = capacitor node,
+* 5 = inductor DCR junction, 10..17 = controller/ramp nodes, 40..41 = load step.
+.NODE_MAP VOUT 3
+.NODE_MAP CTRL 16
+.NODE_MAP RAMP 17
+
+VDC 1 0 DC {Vdc}
+
+* Synchronous power stage. The VCSW comparators implement the same PWM logic as
+* the LTspice companion deck:
+*   high side on when CTRL > RAMP + dead/Ts
+*   low side on when RAMP > CTRL + dead/Ts
+S_HI 1 2 16 17 swhi IC=CLOSE
+S_LO 2 0 17 16 swlo IC=OPEN
+!R$D_HI 2 1 body_diode IC=1
+!R$D_LO 0 2 body_diode IC=1
+L1 2 5 {Lval} IC={Vout/Rload}
+R_L 5 3 {Rl}
+R_ESR 4 3 {Rc}
+COUT 4 0 {Cout} IC={Vout}
+RLOAD 3 0 {Rload}
+S_LOAD 3 41 40 0 loadsw IC=OPEN
+RSTEP 41 0 {Rload}
+VLOADCTL 40 0 PUL V1=0 V2=1 FREQ={load_freq} DRATIO={load_duty} DELAY={load_delay} OFF_UNTIL_DELAY=YES
+
+* Parallel PID controller:
+*   err  = Vout_ref - Vout
+*   int' = Ki*err
+*   ef'  = Kf*(err - ef)
+*   ctrl = Kp*err + int + Kd*Kf*(err - ef)
+VREF 10 0 DC {Vout}
+EERR 11 0 10 3 1
+CINT 12 0 1 IC={Vout/Vdc}
+RINT 12 0 1G
+GINT 0 12 11 0 {Ki}
+CEF 13 0 1 IC=0
+REF 13 0 1G
+GEF 0 13 11 13 {Kf}
+E_KP 14 0 11 0 {Kp}
+E_INT 15 14 12 0 1
+E_DER 16 15 11 13 {Kd*Kf}
+RCTRL 16 0 1G
+VRAMP 17 0 SAW V1=0 V2=1 FREQ={fsw} DELAY=0 OFF_UNTIL_DELAY=NO
+
+.MODEL swhi VCSW RON=5m ROFF=20Meg TH={dead_frac} HYSTWD=1m LOGIC=POS
+.MODEL swlo VCSW RON=5m ROFF=20Meg TH={dead_frac} HYSTWD=1m LOGIC=POS
+.MODEL loadsw VCSW RON=1m ROFF=1G TH=0.5 HYSTWD=0.1 LOGIC=POS
+.MODEL body_diode VPWLR NSEG=4 X0=-100 Y0=-1n X1=0 Y1=0 X2=0.7 Y2=0 X3=0.8 Y3=50 X4=100 Y4=1e6
+
+.PRINT V(#VOUT)
+.PRINT I(L1)
+.TRAN {tstop} 0
+.END
