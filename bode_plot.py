@@ -359,9 +359,11 @@ def run_ltspice_ac_loop_gain_analysis(
     freq_stop_hz: float,
     num_points: int,
     dense_num_points: Optional[int] = None,
+    runner: Optional[LtspiceSimulationRunner] = None,
 ) -> BodeResult:
     """Run LTspice averaged-model .ac loop-gain sweep and return Bode data."""
-    runner = LtspiceSimulationRunner(config)
+    runner = runner or LtspiceSimulationRunner(config)
+    runner.config = config
 
     dense_points = int(dense_num_points if dense_num_points is not None else 0)
     coarse_freq_hz, coarse_response, coarse_elapsed = runner.run_ac(
@@ -405,9 +407,11 @@ def run_ltspice_switching_loop_gain_analysis(
     freq_stop_hz: float,
     num_points: int,
     dense_num_points: Optional[int] = None,
+    runner: Optional[LtspiceSimulationRunner] = None,
 ) -> BodeResult:
     """Run switching-transient LTspice loop-gain extraction and return Bode data."""
-    runner = LtspiceSimulationRunner(config)
+    runner = runner or LtspiceSimulationRunner(config)
+    runner.config = config
 
     coarse_freqs = _logspace_frequency_points(freq_start_hz, freq_stop_hz, num_points)
     dense_points = int(dense_num_points if dense_num_points is not None else 0)
@@ -459,15 +463,16 @@ def run_ltspice_loop_gain_analysis(
     freq_stop_hz: float,
     num_points: int,
     dense_num_points: Optional[int] = None,
+    runner: Optional[LtspiceSimulationRunner] = None,
 ) -> BodeResult:
     """Run the selected LTspice Bode mode."""
     mode = str(getattr(config, "ltspice_bode_mode", "ac") or "ac").strip().lower()
     if mode in ("switching", "switching_fra", "fra", "transient"):
         return run_ltspice_switching_loop_gain_analysis(
-            config, Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points, dense_num_points
+            config, Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points, dense_num_points, runner
         )
     return run_ltspice_ac_loop_gain_analysis(
-        config, Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points, dense_num_points
+        config, Kp, Ki, Kd, Kf, freq_start_hz, freq_stop_hz, num_points, dense_num_points, runner
     )
 
 

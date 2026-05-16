@@ -18,11 +18,13 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from xml.etree import ElementTree as ET
 
+from app_paths import writable_path
+
 import matplotlib.pyplot as plt
 from PIL import Image
 
 
-RESULTS_DIR = str((Path(__file__).resolve().parent / "results").resolve())
+RESULTS_DIR = str(writable_path("results"))
 TARGET_OS = 4.0
 TARGET_US = 4.0
 

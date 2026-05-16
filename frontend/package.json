@@ -1,0 +1,87 @@
+{
+  "name": "buck-pid-autotuner-web",
+  "version": "0.1.0",
+  "description": "Modern Electron workbench for the Buck PID Auto-Tuner",
+  "author": "BuckPidAutoTuner",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:electron": "electron .",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "dist": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.3",
+    "lucide-react": "^0.554.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "^39.2.4",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4"
+  },
+  "build": {
+    "appId": "com.local.buckpidautotuner.web",
+    "productName": "BuckPidAutoTuner Web",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/buck_web_backend.exe",
+        "to": "backend/buck_web_backend.exe"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "../simulation files/plecs/synchronous buck.plecs",
+        "to": "simulation files/plecs/synchronous buck.plecs"
+      },
+      {
+        "from": "../simulation files/plecs/synchronous buck.png",
+        "to": "simulation files/plecs/synchronous buck.png"
+      },
+      {
+        "from": "../simulation files/ltspice",
+        "to": "simulation files/ltspice",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../simulation files/simplis",
+        "to": "simulation files/simplis",
+        "filter": [
+          "*.sxsch",
+          "*.net"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "BuckPidAutoTuner-Web.exe"
+    }
+  }
+}

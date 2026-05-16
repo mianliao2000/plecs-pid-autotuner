@@ -1,8 +1,12 @@
+import os
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 from auto_tune import (
+    AutoTuner,
     CompensatorDesign,
     GridRefinePidTuner,
     PlecsModelEditor,
@@ -12,7 +16,8 @@ from auto_tune import (
     select_best_result,
 )
 from gui import validate_config_values
-from ltspice_backend import LtspiceRawParser, analytic_loop_gain, normalize_backend
+from ltspice_backend import LtspiceRawParser, LtspiceSimulationRunner, analytic_loop_gain, normalize_backend
+from simplis_backend import SimplisExportParser, SimplisSimulationRunner
 
 
 class CompensatorDesignTests(unittest.TestCase):
@@ -83,6 +88,16 @@ class BestResultSelectionTests(unittest.TestCase):
 
 
 class PlecsModelEditorTests(unittest.TestCase):
+    @staticmethod
+    def _seed_old_run_dirs(root: Path, count: int = 20) -> None:
+        root.mkdir(parents=True, exist_ok=True)
+        base_time = 1_700_000_000
+        for idx in range(count):
+            run_dir = root / f"run_20200101_0000{idx:02d}"
+            run_dir.mkdir()
+            (run_dir / "marker.txt").write_text(str(idx), encoding="utf-8")
+            os.utime(run_dir, (base_time + idx, base_time + idx))
+
     def test_prepare_working_model_patches_copy_only(self):
         source_text = """
 Plecs {
@@ -122,6 +137,161 @@ Plecs {
             self.assertIn('NumPoints "51"', patched)
             self.assertIn('NumPoints "71"', patched)
             self.assertIn('ExtractionCycles "30"', patched)
+
+    def test_plecs_work_dir_keeps_only_twenty_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_path = tmp_path / "source.plecs"
+            work_dir = tmp_path / "work"
+            source_path.write_text("Plecs {}", encoding="utf-8")
+            self._seed_old_run_dirs(work_dir)
+
+            cfg = TuningConfig(plecs_exe="", run_bode_analysis=False)
+            work_model = PlecsModelEditor().prepare_working_model(str(source_path), str(work_dir), cfg)
+
+            run_dirs = sorted(path.name for path in work_dir.iterdir() if path.is_dir() and path.name.startswith("run_"))
+            self.assertEqual(len(run_dirs), 20)
+            self.assertNotIn("run_20200101_000000", run_dirs)
+            self.assertTrue(work_model.exists())
+
+    def test_ltspice_work_dir_keeps_only_twenty_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_dir = tmp_path / "source"
+            source_dir.mkdir()
+            asc = source_dir / "model.asc"
+            tran = source_dir / "tran.cir"
+            bode_ac = source_dir / "bode_ac.cir"
+            asc.write_text("Version 4\n", encoding="utf-8")
+            tran.write_text(".tran 1m\n.end\n", encoding="utf-8")
+            bode_ac.write_text(".ac dec 10 1 1k\n.end\n", encoding="utf-8")
+            work_dir = tmp_path / "work"
+            self._seed_old_run_dirs(work_dir)
+
+            cfg = TuningConfig(
+                sim_backend="ltspice",
+                ltspice_exe="",
+                ltspice_asc_model=str(asc),
+                ltspice_netlist_model=str(tran),
+                ltspice_bode_ac_netlist_model=str(bode_ac),
+                ltspice_bode_mode="ac",
+                ltspice_work_dir=str(work_dir),
+            )
+            work_netlist = LtspiceSimulationRunner(cfg).prepare_working_model()
+
+            run_dirs = sorted(path.name for path in work_dir.iterdir() if path.is_dir() and path.name.startswith("run_"))
+            self.assertEqual(len(run_dirs), 20)
+            self.assertNotIn("run_20200101_000000", run_dirs)
+            self.assertTrue(work_netlist.exists())
+
+    def test_simplis_work_dir_keeps_only_twenty_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            schematic = tmp_path / "model.sxsch"
+            netlist = tmp_path / "model.net"
+            schematic.write_text("SIMetrixFile type=schematic\n", encoding="utf-8")
+            netlist.write_text(".VAR Kp=1\n.END\n", encoding="utf-8")
+            work_dir = tmp_path / "work"
+            self._seed_old_run_dirs(work_dir)
+
+            cfg = TuningConfig(
+                sim_backend="simplis",
+                simplis_schematic_model=str(schematic),
+                simplis_netlist_model=str(netlist),
+                simplis_work_dir=str(work_dir),
+            )
+            work_netlist = SimplisSimulationRunner(cfg).prepare_working_model()
+
+            run_dirs = sorted(path.name for path in work_dir.iterdir() if path.is_dir() and path.name.startswith("run_"))
+            self.assertEqual(len(run_dirs), 20)
+            self.assertNotIn("run_20200101_000000", run_dirs)
+            self.assertTrue(work_netlist.exists())
+
+    def test_ltspice_setup_reuses_work_dir_for_same_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_dir = tmp_path / "source"
+            source_dir.mkdir()
+            asc = source_dir / "model.asc"
+            tran = source_dir / "tran.cir"
+            bode_ac = source_dir / "bode_ac.cir"
+            asc.write_text("Version 4\n", encoding="utf-8")
+            tran.write_text(".tran 1m\n.end\n", encoding="utf-8")
+            bode_ac.write_text(".ac dec 10 1 1k\n.end\n", encoding="utf-8")
+            work_dir = tmp_path / "work"
+            cfg = TuningConfig(
+                sim_backend="ltspice",
+                ltspice_exe="",
+                ltspice_asc_model=str(asc),
+                ltspice_netlist_model=str(tran),
+                ltspice_bode_ac_netlist_model=str(bode_ac),
+                ltspice_bode_mode="ac",
+                ltspice_work_dir=str(work_dir),
+            )
+            tuner = AutoTuner(cfg)
+
+            tuner.setup()
+            first_path = tuner.work_model_path
+            tuner.setup(reuse_work_model=True)
+
+            run_dirs = [path for path in work_dir.iterdir() if path.is_dir() and path.name.startswith("run_")]
+            self.assertEqual(len(run_dirs), 1)
+            self.assertEqual(tuner.work_model_path, first_path)
+
+    def test_ltspice_first_single_iteration_creates_new_history_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_dir = tmp_path / "source"
+            source_dir.mkdir()
+            asc = source_dir / "model.asc"
+            tran = source_dir / "tran.cir"
+            bode_ac = source_dir / "bode_ac.cir"
+            asc.write_text("Version 4\n", encoding="utf-8")
+            tran.write_text(".tran 1m\n.end\n", encoding="utf-8")
+            bode_ac.write_text(".ac dec 10 1 1k\n.end\n", encoding="utf-8")
+            work_dir = tmp_path / "work"
+            cfg = TuningConfig(
+                sim_backend="ltspice",
+                ltspice_exe="",
+                ltspice_asc_model=str(asc),
+                ltspice_netlist_model=str(tran),
+                ltspice_bode_ac_netlist_model=str(bode_ac),
+                ltspice_bode_mode="ac",
+                ltspice_work_dir=str(work_dir),
+            )
+            tuner = AutoTuner(cfg)
+
+            tuner.setup()
+            first_path = tuner.work_model_path
+            tuner.setup(reuse_work_model=False)
+
+            run_dirs = [path for path in work_dir.iterdir() if path.is_dir() and path.name.startswith("run_")]
+            self.assertEqual(len(run_dirs), 2)
+            self.assertNotEqual(tuner.work_model_path, first_path)
+
+    def test_simplis_setup_reuses_work_dir_for_same_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            schematic = tmp_path / "model.sxsch"
+            netlist = tmp_path / "model.net"
+            schematic.write_text("SIMetrixFile type=schematic\n", encoding="utf-8")
+            netlist.write_text(".VAR Kp=1\n.END\n", encoding="utf-8")
+            work_dir = tmp_path / "work"
+            cfg = TuningConfig(
+                sim_backend="simplis",
+                simplis_schematic_model=str(schematic),
+                simplis_netlist_model=str(netlist),
+                simplis_work_dir=str(work_dir),
+            )
+            tuner = AutoTuner(cfg)
+
+            tuner.setup()
+            first_path = tuner.work_model_path
+            tuner.setup(reuse_work_model=True)
+
+            run_dirs = [path for path in work_dir.iterdir() if path.is_dir() and path.name.startswith("run_")]
+            self.assertEqual(len(run_dirs), 1)
+            self.assertEqual(tuner.work_model_path, first_path)
 
 
 class GuiValidationTests(unittest.TestCase):
@@ -182,6 +352,7 @@ class LtspiceBackendTests(unittest.TestCase):
     def test_backend_normalization_accepts_ltspice_alias(self):
         self.assertEqual(normalize_backend("LT-Spice"), "ltspice")
         self.assertEqual(normalize_backend("PLECS"), "plecs")
+        self.assertEqual(normalize_backend("SIMetrix-SIMPLIS"), "simplis")
 
     def test_default_ltspice_templates_exist(self):
         cfg = TuningConfig()
@@ -211,6 +382,95 @@ class LtspiceBackendTests(unittest.TestCase):
 
         self.assertEqual(len(response), 2)
         self.assertTrue(all(isinstance(value, complex) for value in response))
+
+
+class SimplisBackendTests(unittest.TestCase):
+    def test_default_simplis_templates_exist(self):
+        cfg = TuningConfig()
+        self.assertTrue(Path(cfg.simplis_schematic_model).exists())
+        self.assertTrue(Path(cfg.simplis_netlist_model).exists())
+
+    def test_default_simplis_netlist_is_closed_loop_switching_model(self):
+        cfg = TuningConfig()
+        text = Path(cfg.simplis_netlist_model).read_text(encoding="utf-8")
+
+        self.assertIn("S_HI 1 2 16 17 swhi", text)
+        self.assertIn("S_LO 2 0 17 16 swlo", text)
+        self.assertIn("VRAMP 17 0 SAW", text)
+        self.assertIn("GINT 0 12 11 0 {Ki}", text)
+        self.assertIn("GEF 0 13 11 13 {Kf}", text)
+        self.assertNotIn("VSW 2 0 PUL", text)
+
+    def test_simplis_validation_reports_missing_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            schematic = tmp_path / "model.sxsch"
+            netlist = tmp_path / "model.net"
+            schematic.write_text("SIMetrixFile type=schematic\n", encoding="utf-8")
+            netlist.write_text(".SIMULATOR SIMPLIS\n.END\n", encoding="utf-8")
+            cfg = TuningConfig(
+                sim_backend="simplis",
+                simplis_exe=str(tmp_path / "missing.exe"),
+                simplis_schematic_model=str(schematic),
+                simplis_netlist_model=str(netlist),
+                run_bode_analysis=True,
+            )
+
+            errors = validate_config_values(cfg)
+
+        self.assertTrue(any("SIMetrix/SIMPLIS executable" in err for err in errors))
+        self.assertFalse(any("Bode" in err for err in errors))
+
+    def test_simplis_export_parser_accepts_csv(self):
+        header, rows = SimplisExportParser.parse_text(
+            "Time,IL,Vout\n"
+            "0,1.0,5.0\n"
+            "1e-6,1.1,5.01\n"
+        )
+
+        self.assertEqual(header, ["Time", "IL", "Vout"])
+        self.assertEqual(rows[1], [1e-6, 1.1, 5.01])
+
+    def test_simplis_export_parser_accepts_simetrix_show_text(self):
+        header, rows = SimplisExportParser.parse_text(
+            "time          Vec('#VOUT')   Vec('L1#P')\n"
+            "0             5              1\n"
+            "1e-06         5.00939134     1.23135967\n"
+        )
+
+        self.assertEqual(header, ["Time", "IL", "Vout"])
+        self.assertEqual(rows[1], [1e-6, 1.23135967, 5.00939134])
+
+    def test_simplis_runner_writes_script_and_reports_missing_export(self):
+        class NoOutputRunner(SimplisSimulationRunner):
+            def _run_simetrix_script(self, script_path: Path) -> subprocess.CompletedProcess[str]:
+                return subprocess.CompletedProcess([str(script_path)], 0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            schematic = tmp_path / "model.sxsch"
+            netlist = tmp_path / "model.net"
+            schematic.write_text("SIMetrixFile type=schematic\n", encoding="utf-8")
+            netlist.write_text(".VAR Kp=1\n.VAR Ki=2\n.VAR Kd=3\n.VAR Kf=4\n.END\n", encoding="utf-8")
+            cfg = TuningConfig(
+                sim_backend="simplis",
+                simplis_exe=sys.executable,
+                simplis_schematic_model=str(schematic),
+                simplis_netlist_model=str(netlist),
+                simplis_work_dir=str(tmp_path / "work"),
+            )
+            runner = NoOutputRunner(cfg)
+
+            with self.assertRaisesRegex(RuntimeError, "export was not created"):
+                runner.run_transient(0, 0.5, 6.0, 7e-6, 800.0)
+
+            self.assertIsNotNone(runner.work_netlist_path)
+            self.assertIsNotNone(runner.script_path)
+            patched = runner.work_netlist_path.read_text(encoding="utf-8")
+            script = runner.script_path.read_text(encoding="utf-8")
+            self.assertIn(".VAR Kp=0.5", patched)
+            self.assertIn("PreProcessNetlist /simulator SIMPLIS", script)
+            self.assertIn("RunSIMPLIS", script)
 
 
 if __name__ == "__main__":

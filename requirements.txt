@@ -3,3 +3,6 @@ matplotlib
 Pillow
 PyLTSpice
 xlsxwriter
+fastapi
+uvicorn
+websockets

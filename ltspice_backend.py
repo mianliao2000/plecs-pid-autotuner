@@ -14,12 +14,16 @@ import time
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
 
+from app_paths import create_limited_run_dir
+
 
 def normalize_backend(value: str) -> str:
     """Normalize a user/config backend name."""
     backend = (value or "plecs").strip().lower()
     if backend in ("ltspice", "lt-spice", "lt"):
         return "ltspice"
+    if backend in ("simplis", "simetrix", "simetrix-simplis", "simetrix_simplis"):
+        return "simplis"
     return "plecs"
 
 
@@ -50,29 +54,22 @@ def import_pyltspice():
     older examples import directly from PyLTSpice. Support both shapes.
     """
     try:
-        from PyLTSpice import RawRead, SimRunner, SpiceEditor  # type: ignore
+        from PyLTSpice.sim.sim_runner import SimRunner  # type: ignore
+        from PyLTSpice.editor.spice_editor import SpiceEditor  # type: ignore
+        from spicelib.raw.raw_read import RawRead  # type: ignore
 
         return SimRunner, SpiceEditor, RawRead
     except Exception as pyltspice_error:
         try:
-            from spicelib import RawRead, SimRunner, SpiceEditor  # type: ignore
+            from spicelib.sim.sim_runner import SimRunner  # type: ignore
+            from spicelib.editor.spice_editor import SpiceEditor  # type: ignore
+            from spicelib.raw.raw_read import RawRead  # type: ignore
 
             return SimRunner, SpiceEditor, RawRead
         except Exception as spicelib_error:
             raise ImportError(
                 "PyLTSpice/spicelib is not installed. Install it with: pip install PyLTSpice"
             ) from spicelib_error or pyltspice_error
-
-
-def _unique_run_dir(root: Path, prefix: str = "run") -> Path:
-    timestamp = time.strftime(f"{prefix}_%Y%m%d_%H%M%S")
-    run_dir = root / timestamp
-    suffix = 1
-    while run_dir.exists():
-        run_dir = root / f"{timestamp}_{suffix:02d}"
-        suffix += 1
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
 
 
 def _as_float_list(values: Any) -> List[float]:
@@ -225,7 +222,7 @@ class LtspiceSimulationRunner:
 
     def prepare_working_model(self) -> Path:
         work_root = Path(getattr(self.config, "ltspice_work_dir")).resolve()
-        self.run_dir = _unique_run_dir(work_root)
+        self.run_dir = create_limited_run_dir(work_root)
 
         artifacts = [
             ("ltspice_asc_model", "work_asc_path"),

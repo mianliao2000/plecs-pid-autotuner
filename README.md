@@ -1,6 +1,6 @@
 # Buck Converter PID Auto-Tuner
 
-Automated PID tuning system for a synchronous buck converter simulated in either PLECS or LTspice. PLECS runs through XML-RPC against a disposable `.plecs` copy; LTspice runs through PyLTSpice against generated switching and AC companion netlists. The tuner uses analytical Type 3 compensator design to search over crossover frequency (`wc`) and phase margin (`phi_m`) instead of searching through all four PID gains independently.
+Automated PID tuning system for a synchronous buck converter simulated in PLECS, LTspice, or SIMPLIS. PLECS runs through XML-RPC against a disposable `.plecs` copy; LTspice runs through PyLTSpice against generated switching and AC companion netlists; SIMPLIS runs transient simulations through SIMetrix/SIMPLIS scripts against a disposable companion netlist while also bundling a visual `.sxsch` schematic for manual work. The tuner uses analytical Type 3 compensator design to search over crossover frequency (`wc`) and phase margin (`phi_m`) instead of searching through all four PID gains independently.
 
 ---
 
@@ -44,8 +44,18 @@ plecs-pid-autotuner/
 ├── bode_plot.py              # Loop-gain frequency response analysis
 ├── iteration_export.py       # Per-iteration PNG frames and Excel workbooks
 ├── analyze.py                # Post-processing: animation GIF, trend plots
-├── synchronous buck.plecs    # PLECS model template (not modified by runs)
-├── synchronous buck.png      # Circuit screenshot shown in GUI
+├── simulation files/
+│   ├── plecs/
+│   │   ├── synchronous buck.plecs    # PLECS model template (not modified by runs)
+│   │   └── synchronous buck.png      # Circuit screenshot shown in GUI
+│   ├── ltspice/
+│   │   ├── synchronous_buck.asc
+│   │   ├── synchronous_buck_tran.cir
+│   │   ├── synchronous_buck_bode.cir
+│   │   └── synchronous_buck_bode_ac.cir
+│   └── simplis/
+│       ├── synchronous_buck.sxsch     # Visual SIMPLIS schematic for manual use
+│       └── synchronous_buck_tran.net  # SIMPLIS transient companion netlist
 ├── plecs_tuning_work/        # Disposable per-run model copies
 └── results/
     ├── figures_MMDD_HHMM/    # Timestamped run folder
@@ -314,7 +324,7 @@ Uses an adaptive band derived from the ripple amplitude at the tail of the analy
 
 ### Bode Analysis
 
-After each time-domain simulation, a loop-gain frequency response can optionally be extracted. PLECS uses the built-in analysis tool. LTspice has two GUI-selectable Bode modes:
+After each time-domain simulation, a loop-gain frequency response can optionally be extracted. PLECS uses the built-in analysis tool. LTspice has two GUI-selectable Bode modes. SIMPLIS currently supports transient tuning only; Bode/POP/AC integration is deferred and the UI disables Bode controls when SIMPLIS is selected.
 
 - **AC sweep**: runs LTspice `.ac` on the averaged small-signal companion netlist. This is fast and is the default LTspice Bode mode.
 - **Switching FRA**: runs the real switching companion circuit in transient mode for each frequency point. This is much slower, but verifies the switching model directly.
@@ -355,7 +365,7 @@ python gui.py
 +--------------------------------------------+------------------------------------------+
 |  Left panel (scrollable)                   |  Right panel                             |
 |                                            |                                          |
-|  [PLECS] [LTspice] backend tabs            |                                          |
+|  [PLECS] [LTspice] [SIMPLIS] backend tabs  |                                          |
 |    Backend-specific model paths            |                                          |
 |                                            |                                          |
 |  Circuit screenshot                        |  [Waveform canvas]  [Bode canvas]        |
@@ -399,7 +409,7 @@ Runs one simulation using the current PID spinbox values, then automatically com
 
 ### Model Safety
 
-The GUI and CLI do not write source model templates during a run. PLECS runs copy the `.plecs` file into `plecs_tuning_work/`; LTspice runs copy the `.asc` and `.cir` files into `ltspice_tuning_work/`. PID and Bode settings are applied only to those disposable working copies.
+The GUI and CLI do not write source model templates during a run. PLECS runs copy the `.plecs` file into `plecs_tuning_work/`; LTspice runs copy the `.asc` and `.cir` files into `ltspice_tuning_work/`; SIMPLIS runs copy the `.sxsch` and `.net` files into `simplis_tuning_work/`. PID and Bode settings are applied only to those disposable working copies. Each tuning-work folder keeps at most 20 `run_*` directories; when a new run would exceed that limit, the oldest run directory is removed first.
 
 ---
 
@@ -408,8 +418,9 @@ The GUI and CLI do not write source model templates during a run. PLECS runs cop
 ### Prerequisites
 
 - Python 3.10+
-- PLECS 5.0 (64-bit), LTspice, or both, depending on the GUI backend selection
+- PLECS 5.0 (64-bit), LTspice, SIMetrix/SIMPLIS, or the subset matching your selected backend
 - LTspice users need PyLTSpice from `requirements.txt`; the GUI auto-detects the common ADI install path and also honors `LTSPICE_EXE`
+- SIMPLIS users need SIMetrix/SIMPLIS installed; the app auto-detects common `C:\Program Files\SIMetrix*\bin64\SIMetrix.exe` paths and also honors `SIMPLIS_EXE`
 - Python packages:
 
 ```
@@ -421,6 +432,43 @@ pip install -r requirements.txt
 ```bash
 python gui.py
 ```
+
+### Build the Windows EXE
+
+The single-file GUI build is produced with PyInstaller. PLECS, LTspice, and SIMetrix/SIMPLIS are
+not bundled; the EXE calls the simulator installed on the target Windows
+machine. Bundled resources include the PLECS model template, circuit screenshot,
+LTspice `.asc`/`.cir` templates, and SIMPLIS `.sxsch`/`.net` templates.
+
+```powershell
+python -m pip install PyInstaller
+powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
+```
+
+The output is `dist/BuckPidAutoTuner.exe`. When running from the EXE, results
+and working model copies are written under
+`%LOCALAPPDATA%\BuckPidAutoTuner\` instead of the source checkout.
+
+Quick smoke checks:
+
+```powershell
+.\dist\BuckPidAutoTuner.exe --smoke
+.\dist\BuckPidAutoTuner.exe --ltspice-smoke
+```
+
+### Build the Electron Web Workbench
+
+The modern desktop workbench is a parallel Electron + React app backed by a
+local FastAPI process. It keeps the existing PyQt GUI available and produces a
+separate portable executable.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build_web_exe.ps1
+```
+
+The output is `dist-electron/BuckPidAutoTuner-Web.exe`. It launches the local
+Python backend automatically, calls the installed PLECS/LTspice/SIMPLIS simulators, and
+writes run outputs under `%LOCALAPPDATA%\BuckPidAutoTuner\` when packaged.
 
 ### Run the CLI tuner directly
 
@@ -448,19 +496,23 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 
 | Field | Default | Description |
 |---|---|---|
-| `sim_backend` | `ltspice` | Selected backend: `plecs` or `ltspice` |
+| `sim_backend` | `ltspice` | Selected backend: `plecs`, `ltspice`, or `simplis` |
 | `plecs_exe` | PLECS 5.0 path | Path to PLECS executable |
-| `plecs_model` | `synchronous buck.plecs` | Source model file |
+| `plecs_model` | `simulation files/plecs/synchronous buck.plecs` | Source model file |
 | `ltspice_exe` | Auto-detected ADI path | Path to LTspice executable |
-| `ltspice_asc_model` | `ltspice/synchronous_buck.asc` | LTspice companion schematic |
-| `ltspice_netlist_model` | `ltspice/synchronous_buck_tran.cir` | LTspice switching transient netlist |
-| `ltspice_bode_netlist_model` | `ltspice/synchronous_buck_bode.cir` | LTspice switching-FRA Bode netlist |
-| `ltspice_bode_ac_netlist_model` | `ltspice/synchronous_buck_bode_ac.cir` | LTspice averaged AC Bode netlist |
+| `ltspice_asc_model` | `simulation files/ltspice/synchronous_buck.asc` | LTspice companion schematic |
+| `ltspice_netlist_model` | `simulation files/ltspice/synchronous_buck_tran.cir` | LTspice switching transient netlist |
+| `ltspice_bode_netlist_model` | `simulation files/ltspice/synchronous_buck_bode.cir` | LTspice switching-FRA Bode netlist |
+| `ltspice_bode_ac_netlist_model` | `simulation files/ltspice/synchronous_buck_bode_ac.cir` | LTspice averaged AC Bode netlist |
 | `ltspice_bode_mode` | `ac` | LTspice-only Bode mode: `ac` or `switching` |
+| `simplis_exe` | Auto-detected SIMetrix path | Path to SIMetrix/SIMPLIS executable |
+| `simplis_schematic_model` | `simulation files/simplis/synchronous_buck.sxsch` | Visual SIMPLIS schematic for manual opening/editing |
+| `simplis_netlist_model` | `simulation files/simplis/synchronous_buck_tran.net` | SIMPLIS transient companion netlist used by automation |
 | `rpc_url` | `http://127.0.0.1:1080/RPC2` | PLECS XML-RPC endpoint |
 | `results_dir` | `results/` | Root folder for run subfolders |
 | `work_dir` | `plecs_tuning_work/` | Disposable PLECS working model copies |
 | `ltspice_work_dir` | `ltspice_tuning_work/` | Disposable LTspice working model copies |
+| `simplis_work_dir` | `simplis_tuning_work/` | Disposable SIMPLIS working schematic/netlist copies |
 | `sim_time_span` | `3e-3` | Simulation duration (s) |
 | `load_pulse_frequency` | `250` | Load pulse frequency (Hz) |
 | `load_pulse_duty_cycle` | `0.25` | Load pulse duty cycle |
@@ -484,7 +536,36 @@ All tuning parameters live in the `TuningConfig` dataclass in `auto_tune.py`:
 
 The default starting point (wc = 15 kHz, phi_m = 30°) is intentionally poor — near resonance with low damping — to demonstrate the tuner's ability to recover. A good nominal starting point would be wc = 25 kHz, phi_m = 60°.
 
-The path-like defaults can also be overridden with environment variables: `SIM_BACKEND`, `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, `PLECS_WORK_DIR`, `LTSPICE_EXE`, `LTSPICE_ASC_MODEL`, `LTSPICE_NETLIST_MODEL`, `LTSPICE_BODE_NETLIST_MODEL`, `LTSPICE_BODE_AC_NETLIST_MODEL`, `LTSPICE_BODE_MODE`, and `LTSPICE_WORK_DIR`.
+The path-like defaults can also be overridden with environment variables: `SIM_BACKEND`, `PLECS_EXE`, `PLECS_MODEL`, `PLECS_RPC_URL`, `PLECS_RESULTS_DIR`, `PLECS_WORK_DIR`, `LTSPICE_EXE`, `LTSPICE_ASC_MODEL`, `LTSPICE_NETLIST_MODEL`, `LTSPICE_BODE_NETLIST_MODEL`, `LTSPICE_BODE_AC_NETLIST_MODEL`, `LTSPICE_BODE_MODE`, `LTSPICE_WORK_DIR`, `SIMPLIS_EXE`, `SIMPLIS_SCHEMATIC_MODEL`, `SIMPLIS_NETLIST_MODEL`, and `SIMPLIS_WORK_DIR`.
+
+### SIMPLIS backend notes
+
+The SIMPLIS backend has two bundled files, matching the LTspice pattern:
+
+- `simulation files/simplis/synchronous_buck.sxsch` opens in SIMetrix/SIMPLIS for manual inspection and edits.
+- `simulation files/simplis/synchronous_buck_tran.net` is copied to `simplis_tuning_work/` and patched with `Kp`, `Ki`, `Kd`, `Kf`, and load-step timing before each automated transient run. It uses SIMPLIS-native linear controlled sources for the PID states, a `SAW` PWM ramp, `VCSW` high/low/load switches, the same 20 ns dead-time, and VPWLR body-diode elements.
+
+First-version SIMPLIS support is transient-only. The app deliberately returns no Bode data for SIMPLIS iterations until POP/AC integration is added.
+
+### SIMPLIS netlist visualization
+
+If a SIMPLIS design is only available as a plain netlist and your SIMetrix/SIMPLIS version does not include the 9.2 netlist-to-schematic converter, use the local helper:
+
+```bash
+python simplis_netlist_converter.py "simulation files/simplis/synchronous_buck_tran.net"
+```
+
+By default it writes a readable ASCII `.sxsch` schematic next to the input netlist. Extra outputs can be requested explicitly:
+
+```bash
+python simplis_netlist_converter.py "input.net" \
+  --sxsch "simulation files/simplis/synchronous_buck.sxsch" \
+  --dot "results/input.dot" \
+  --json "results/input.json" \
+  --sxscr "results/input_visual.sxscr"
+```
+
+The `.sxsch` output is a hand-laid-out visual schematic, inspired by the LTspice readable `.asc` view. It is meant for inspection and manual cleanup; `synchronous_buck_tran.net` remains the single source of truth for automated SIMPLIS simulation.
 
 ---
 

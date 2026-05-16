@@ -44,6 +44,7 @@ from iteration_export import (
     write_bode_workbook,
     write_time_workbook,
 )
+from app_paths import resource_path
 from ltspice_backend import import_pyltspice
 
 
@@ -77,13 +78,26 @@ def validate_config_values(config: TuningConfig) -> List[str]:
             import_pyltspice()
         except ImportError as exc:
             errors.append(str(exc))
+    elif backend == "simplis":
+        if not config.simplis_exe or not Path(config.simplis_exe).exists():
+            errors.append(
+                "SIMetrix/SIMPLIS executable not found. Set SIMPLIS_EXE or choose SIMetrix.exe in the GUI."
+            )
+        for label, path in (
+            ("SIMPLIS schematic", config.simplis_schematic_model),
+            ("SIMPLIS transient netlist", config.simplis_netlist_model),
+        ):
+            if not Path(path).exists():
+                errors.append(f"{label} not found: {path}")
+    else:
+        errors.append(f"Unsupported backend: {config.sim_backend}")
     if config.max_iterations < 1:
         errors.append("Max Iter must be at least 1.")
     if config.target_overshoot < 0 or config.target_undershoot < 0:
         errors.append("Overshoot and undershoot targets must be non-negative.")
     if config.target_settling_time <= 0:
         errors.append("Settling-time target must be positive.")
-    if config.run_bode_analysis:
+    if config.run_bode_analysis and backend != "simplis":
         if config.bode_freq_stop_hz <= config.bode_freq_start_hz:
             errors.append("Bode Stop f (Hz) must be greater than Start f (Hz).")
         if config.bode_coarse_num_points < 5:
@@ -444,6 +458,8 @@ class TunerWorker(QObject):
         if not getattr(self.config, "run_bode_analysis", False):
             return None
         backend = self.config.backend
+        if backend == "simplis":
+            return None
         if backend == "ltspice":
             bode_mode = str(getattr(self.config, "ltspice_bode_mode", "ac") or "ac").lower()
             mode_label = "Switching FRA" if bode_mode != "ac" else "AC sweep"
@@ -457,6 +473,7 @@ class TunerWorker(QObject):
                 getattr(self.config, "bode_freq_stop_hz", 1e5),
                 int(getattr(self.config, "bode_coarse_num_points", 31)),
                 int(getattr(self.config, "bode_dense_num_points", 51)),
+                self._auto_tuner.ltspice if self._auto_tuner is not None else None,
             )
             fc_text = f"{bode.metrics.crossover_hz / 1000:.2f} kHz" if bode.metrics.crossover_hz is not None else "n/a"
             pm_text = f"{bode.metrics.phase_margin_deg:.1f} deg" if bode.metrics.phase_margin_deg is not None else "n/a"
@@ -565,7 +582,7 @@ class TunerWorker(QObject):
         try:
             at = AutoTuner(self.config)
             self._auto_tuner = at
-            backend_label = "LTspice" if self.config.backend == "ltspice" else "PLECS"
+            backend_label = {"ltspice": "LTspice", "simplis": "SIMPLIS"}.get(self.config.backend, "PLECS")
             self.log_message.emit(f"Preparing {backend_label}...")
             self.status_changed.emit({'backend': f'{backend_label} starting', 'mode': 'Auto'})
             at.setup()
@@ -676,11 +693,11 @@ class TunerWorker(QObject):
                 at = AutoTuner(self.config)
                 self._auto_tuner = at
             at = self._auto_tuner
-            backend_label = "LTspice" if self.config.backend == "ltspice" else "PLECS"
+            backend_label = {"ltspice": "LTspice", "simplis": "SIMPLIS"}.get(self.config.backend, "PLECS")
             self.log_message.emit(f"Preparing {backend_label}...")
             self.status_changed.emit({'backend': f'{backend_label} starting', 'mode': 'Single'})
             at.config = self.config
-            at.setup()
+            at.setup(reuse_work_model=iter_num > 0)
             self.status_changed.emit({
                 'backend': f'{backend_label} ready',
                 'mode': 'Single',
@@ -917,9 +934,23 @@ class BuckTunerGui(QMainWindow):
         widgets, self.edit_ltspice_bode_ac = self._add_path_row(
             ltspice_layout, 4, "AC Bode:", cfg.ltspice_bode_ac_netlist_model, "SPICE Netlists (*.cir *.net);;All Files (*)")
 
+        simplis_tab = QWidget()
+        simplis_tab.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        simplis_layout = QGridLayout(simplis_tab)
+        simplis_layout.setContentsMargins(0, 4, 0, 6)
+        simplis_layout.setHorizontalSpacing(6)
+        simplis_layout.setVerticalSpacing(4)
+        widgets, self.edit_simplis_exe = self._add_path_row(
+            simplis_layout, 0, "SIMetrix exe:", cfg.simplis_exe, "Executables (*.exe);;All Files (*)")
+        widgets, self.edit_simplis_schematic = self._add_path_row(
+            simplis_layout, 1, "SIMPLIS sxsch:", cfg.simplis_schematic_model, "SIMPLIS Schematics (*.sxsch);;All Files (*)")
+        widgets, self.edit_simplis_net = self._add_path_row(
+            simplis_layout, 2, "SIMPLIS tran:", cfg.simplis_netlist_model, "SIMPLIS/SPICE Netlists (*.net *.cir *.sp);;All Files (*)")
+
         tabs.addTab(plecs_tab, "PLECS")
         tabs.addTab(ltspice_tab, "LTspice")
-        tabs.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
+        tabs.addTab(simplis_tab, "SIMPLIS")
+        tabs.setCurrentIndex({"plecs": 0, "ltspice": 1, "simplis": 2}.get(cfg.backend, 0))
         tabs.currentChanged.connect(self._on_backend_changed)
         QTimer.singleShot(0, self._on_backend_changed)
         return tabs
@@ -1166,6 +1197,9 @@ class BuckTunerGui(QMainWindow):
         if cfg.backend == "ltspice":
             model_path = Path(cfg.ltspice_asc_model).resolve()
             label = "LTspice schematic"
+        elif cfg.backend == "simplis":
+            model_path = Path(cfg.simplis_schematic_model).resolve()
+            label = "SIMPLIS schematic"
         else:
             model_path = Path(cfg.plecs_model).resolve()
             label = "PLECS model"
@@ -1180,7 +1214,7 @@ class BuckTunerGui(QMainWindow):
 
     def _load_default_circuit_image(self) -> None:
         """Load the checked-in circuit screenshot if it exists."""
-        image_path = Path(__file__).resolve().parent / "synchronous buck.png"
+        image_path = resource_path("simulation files", "plecs", "synchronous buck.png")
         if not image_path.exists():
             return
         pixmap = QPixmap(str(image_path))
@@ -1264,7 +1298,7 @@ class BuckTunerGui(QMainWindow):
     def _selected_backend(self) -> str:
         if not hasattr(self, "tabs_backend"):
             return TuningConfig().backend
-        return "ltspice" if self.tabs_backend.currentIndex() == 1 else "plecs"
+        return {0: "plecs", 1: "ltspice", 2: "simplis"}.get(self.tabs_backend.currentIndex(), "plecs")
 
     def _selected_ltspice_bode_mode(self) -> str:
         if not hasattr(self, "combo_ltspice_bode_mode"):
@@ -1281,6 +1315,8 @@ class BuckTunerGui(QMainWindow):
     def _on_backend_changed(self, *_args) -> None:
         backend = self._selected_backend()
         show_plecs = backend == "plecs"
+        show_ltspice = backend == "ltspice"
+        show_simplis = backend == "simplis"
         if hasattr(self, "tabs_backend"):
             current_page = self.tabs_backend.currentWidget()
             if current_page is not None:
@@ -1290,13 +1326,17 @@ class BuckTunerGui(QMainWindow):
         if hasattr(self, "btn_capture"):
             self.btn_capture.setEnabled(show_plecs)
         if hasattr(self, "spin_bode_cycles"):
-            ltspice_mode_visible = not show_plecs
+            ltspice_mode_visible = show_ltspice
             self.lbl_ltspice_bode_mode.setVisible(ltspice_mode_visible)
             self.combo_ltspice_bode_mode.setVisible(ltspice_mode_visible)
             cycles_needed = show_plecs or self._selected_ltspice_bode_mode() != "ac"
-            self.spin_bode_cycles.setEnabled(cycles_needed)
-            self.spin_bode_dense_points.setEnabled(True)
-        backend_label = "PLECS" if show_plecs else "LTspice"
+            self.chk_run_bode.setEnabled(not show_simplis)
+            self.spin_bode_cycles.setEnabled((not show_simplis) and cycles_needed)
+            self.spin_bode_f_start.setEnabled(not show_simplis)
+            self.spin_bode_f_stop.setEnabled(not show_simplis)
+            self.spin_bode_coarse_points.setEnabled(not show_simplis)
+            self.spin_bode_dense_points.setEnabled(not show_simplis)
+        backend_label = {"plecs": "PLECS", "ltspice": "LTspice", "simplis": "SIMPLIS"}[backend]
         self._update_status_panel(backend=f"{backend_label} selected")
 
     def _make_config(self) -> TuningConfig:
@@ -1310,6 +1350,9 @@ class BuckTunerGui(QMainWindow):
         cfg.ltspice_bode_netlist_model = self.edit_ltspice_bode.text().strip()
         cfg.ltspice_bode_ac_netlist_model = self.edit_ltspice_bode_ac.text().strip()
         cfg.ltspice_bode_mode = self._selected_ltspice_bode_mode()
+        cfg.simplis_exe = self.edit_simplis_exe.text().strip()
+        cfg.simplis_schematic_model = self.edit_simplis_schematic.text().strip()
+        cfg.simplis_netlist_model = self.edit_simplis_net.text().strip()
         cfg.target_overshoot = self.spin_tgt_os.value()
         cfg.target_undershoot = self.spin_tgt_us.value()
         cfg.max_oscillations = int(self.spin_max_osc.value())
@@ -1317,7 +1360,7 @@ class BuckTunerGui(QMainWindow):
         cfg.max_iterations = int(self.spin_max_iter.value())
         cfg.wc_initial = self.spin_wc.value()
         cfg.phi_m_initial = math.radians(self.spin_phim.value())
-        cfg.run_bode_analysis = self.chk_run_bode.isChecked()
+        cfg.run_bode_analysis = self.chk_run_bode.isChecked() and cfg.backend != "simplis"
         cfg.bode_freq_start_hz = self.spin_bode_f_start.value()
         cfg.bode_freq_stop_hz = self.spin_bode_f_stop.value()
         cfg.bode_extraction_cycles = int(self.spin_bode_cycles.value())
@@ -1499,6 +1542,7 @@ class BuckTunerGui(QMainWindow):
             self.edit_plecs_model, self.edit_plecs_exe,
             self.edit_ltspice_exe, self.edit_ltspice_asc,
             self.edit_ltspice_net, self.edit_ltspice_bode, self.edit_ltspice_bode_ac,
+            self.edit_simplis_exe, self.edit_simplis_schematic, self.edit_simplis_net,
         ):
             edit.textChanged.connect(self._queue_model_sync)
         self.spin_wc.valueChanged.connect(self._set_pid_dirty)
@@ -1509,7 +1553,7 @@ class BuckTunerGui(QMainWindow):
 
     def _sync_gui_to_model(self) -> None:
         # The GUI deliberately does not write source models. AutoTuner copies
-        # the selected PLECS/LTspice template to a work directory for each run.
+        # the selected simulator template to a work directory for each run.
         return
 
     def _prune_old_run_folders(self) -> None:
@@ -1586,8 +1630,9 @@ class BuckTunerGui(QMainWindow):
         self._clear_bode_results()
         cfg.results_dir = str(self._current_results_dir)
         self._clear_history_table()
+        backend_label = {"ltspice": "LTspice", "simplis": "SIMPLIS"}.get(cfg.backend, "PLECS")
         self._update_status_panel(
-            backend=f"{'LTspice' if cfg.backend == 'ltspice' else 'PLECS'} queued",
+            backend=f"{backend_label} queued",
             mode="Auto",
             phase="bootstrap",
             current_result=None,
@@ -1620,8 +1665,9 @@ class BuckTunerGui(QMainWindow):
         if not self._validate_or_warn(cfg):
             return
         cfg.results_dir = str(self._current_results_dir)
+        backend_label = {"ltspice": "LTspice", "simplis": "SIMPLIS"}.get(cfg.backend, "PLECS")
         self._update_status_panel(
-            backend=f"{'LTspice' if cfg.backend == 'ltspice' else 'PLECS'} queued",
+            backend=f"{backend_label} queued",
             mode="Single",
             iter_num=self._iter_counter,
             max_iterations=cfg.max_iterations,
@@ -1678,7 +1724,7 @@ class BuckTunerGui(QMainWindow):
         cfg = TuningConfig()
         comp = CompensatorDesign()
         ref_Kp, ref_Ki, ref_Kd, ref_Kf = comp.compute(cfg.wc_initial, cfg.phi_m_initial)
-        self.tabs_backend.setCurrentIndex(1 if cfg.backend == "ltspice" else 0)
+        self.tabs_backend.setCurrentIndex({"plecs": 0, "ltspice": 1, "simplis": 2}.get(cfg.backend, 0))
         self.edit_plecs_model.setText(cfg.plecs_model)
         self.edit_plecs_exe.setText(cfg.plecs_exe)
         self.edit_ltspice_exe.setText(cfg.ltspice_exe)
@@ -1686,6 +1732,9 @@ class BuckTunerGui(QMainWindow):
         self.edit_ltspice_net.setText(cfg.ltspice_netlist_model)
         self.edit_ltspice_bode.setText(cfg.ltspice_bode_netlist_model)
         self.edit_ltspice_bode_ac.setText(cfg.ltspice_bode_ac_netlist_model)
+        self.edit_simplis_exe.setText(cfg.simplis_exe)
+        self.edit_simplis_schematic.setText(cfg.simplis_schematic_model)
+        self.edit_simplis_net.setText(cfg.simplis_netlist_model)
         mode = str(getattr(cfg, "ltspice_bode_mode", "ac") or "ac").lower()
         self.combo_ltspice_bode_mode.setCurrentIndex(1 if mode in ("switching", "switching_fra", "fra", "transient") else 0)
         self.spin_kp.setValue(ref_Kp)
@@ -1716,8 +1765,9 @@ class BuckTunerGui(QMainWindow):
 
         self.log_text.clear()
         self._set_running(False)
+        backend_label = {"ltspice": "LTspice", "simplis": "SIMPLIS"}.get(cfg.backend, "PLECS")
         self._update_status_panel(
-            backend=f"{'LTspice' if cfg.backend == 'ltspice' else 'PLECS'} selected",
+            backend=f"{backend_label} selected",
             mode="Ready",
             phase="-",
             current_result=None,
@@ -1833,8 +1883,9 @@ class BuckTunerGui(QMainWindow):
             target_ts_ms=target_ts_ms,
         )
         self._append_history_row(data)
+        backend_label = {"ltspice": "LTspice", "simplis": "SIMPLIS"}.get(data.get('backend'), "PLECS")
         self._update_status_panel(
-            backend=f"{'LTspice' if data.get('backend') == 'ltspice' else 'PLECS'} ready",
+            backend=f"{backend_label} ready",
             mode="Auto" if self._run_mode == "auto" else "Single",
             phase=data.get('phase', '-'),
             current_result=result,
@@ -1949,6 +2000,7 @@ class BuckTunerGui(QMainWindow):
             self.edit_plecs_model, self.edit_plecs_exe,
             self.edit_ltspice_exe, self.edit_ltspice_asc,
             self.edit_ltspice_net, self.edit_ltspice_bode, self.edit_ltspice_bode_ac,
+            self.edit_simplis_exe, self.edit_simplis_schematic, self.edit_simplis_net,
         ):
             edit.setReadOnly(running)
         self.spin_kp.setReadOnly(running)
@@ -1962,6 +2014,8 @@ class BuckTunerGui(QMainWindow):
         self.spin_bode_cycles.setReadOnly(running)
         self.spin_bode_coarse_points.setReadOnly(running)
         self.spin_bode_dense_points.setReadOnly(running)
+        if not running:
+            self._on_backend_changed()
 
     def closeEvent(self, event):
         self._cleanup_worker()
@@ -1977,9 +2031,52 @@ class BuckTunerGui(QMainWindow):
 from PyQt5.QtCore import QMetaObject, Q_ARG
 
 
+def _run_ltspice_smoke() -> int:
+    """Run one LTspice transient iteration without opening the GUI."""
+    cfg = TuningConfig(sim_backend="ltspice", run_bode_analysis=False, max_iterations=1)
+    errors = validate_config_values(cfg)
+    if errors:
+        print("\n".join(errors))
+        return 2
+
+    try:
+        tuner = AutoTuner(cfg)
+        tuner.setup()
+        Kp, Ki, Kd, Kf = CompensatorDesign().compute(cfg.wc_initial, cfg.phi_m_initial)
+        result = tuner.run_iteration(0, Kp, Ki, Kd, Kf)
+    except Exception as exc:
+        print(f"LTspice smoke failed: {exc}")
+        return 1
+
+    if not tuner.last_data:
+        print("LTspice smoke failed: no waveform data was returned.")
+        return 3
+
+    print(
+        "LTspice smoke ok: "
+        f"OS={result.overshoot:.2f}%, US={result.undershoot:.2f}%, "
+        f"Osc={result.osc_count}, Ts={result.settling_time * 1000:.3f} ms, "
+        f"status={result.status}"
+    )
+    print(f"Work model: {tuner.work_model_path}")
+    print(f"Results dir: {cfg.results_dir}")
+    return 0
+
+
 def main():
-    app = QApplication(sys.argv)
+    if "--ltspice-smoke" in sys.argv:
+        sys.exit(_run_ltspice_smoke())
+
+    smoke = "--smoke" in sys.argv
+    app = QApplication([arg for arg in sys.argv if arg != "--smoke"])
     window = BuckTunerGui()
+    if smoke:
+        cfg = window._make_config()
+        missing = validate_config_values(cfg)
+        if missing:
+            print("\n".join(missing))
+        window.close()
+        sys.exit(0 if not missing else 2)
     window.showMaximized()
     sys.exit(app.exec_())
 

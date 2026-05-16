@@ -29,7 +29,9 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Tuple, List, Dict
 
+from app_paths import create_limited_run_dir, resource_path, writable_path
 from ltspice_backend import LtspiceSimulationRunner, find_default_ltspice_exe, normalize_backend
+from simplis_backend import SimplisSimulationRunner, find_default_simplis_exe
 
 
 @dataclass
@@ -243,39 +245,52 @@ class TuningConfig:
     plecs_exe: str = os.environ.get("PLECS_EXE", r"C:\Users\liaom\Documents\Plexim\PLECS 5.0 (64 bit)\PLECS.exe")
     plecs_model: str = os.environ.get(
         "PLECS_MODEL",
-        str((Path(__file__).resolve().parent / "synchronous buck.plecs").resolve()),
+        str(resource_path("simulation files", "plecs", "synchronous buck.plecs")),
     )
     ltspice_exe: str = os.environ.get("LTSPICE_EXE", find_default_ltspice_exe())
     ltspice_asc_model: str = os.environ.get(
         "LTSPICE_ASC_MODEL",
-        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck.asc").resolve()),
+        str(resource_path("simulation files", "ltspice", "synchronous_buck.asc")),
     )
     ltspice_netlist_model: str = os.environ.get(
         "LTSPICE_NETLIST_MODEL",
-        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_tran.cir").resolve()),
+        str(resource_path("simulation files", "ltspice", "synchronous_buck_tran.cir")),
     )
     ltspice_bode_netlist_model: str = os.environ.get(
         "LTSPICE_BODE_NETLIST_MODEL",
-        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_bode.cir").resolve()),
+        str(resource_path("simulation files", "ltspice", "synchronous_buck_bode.cir")),
     )
     ltspice_bode_ac_netlist_model: str = os.environ.get(
         "LTSPICE_BODE_AC_NETLIST_MODEL",
-        str((Path(__file__).resolve().parent / "ltspice" / "synchronous_buck_bode_ac.cir").resolve()),
+        str(resource_path("simulation files", "ltspice", "synchronous_buck_bode_ac.cir")),
     )
     ltspice_bode_mode: str = os.environ.get("LTSPICE_BODE_MODE", "ac")
+    simplis_exe: str = os.environ.get("SIMPLIS_EXE", find_default_simplis_exe())
+    simplis_schematic_model: str = os.environ.get(
+        "SIMPLIS_SCHEMATIC_MODEL",
+        str(resource_path("simulation files", "simplis", "synchronous_buck.sxsch")),
+    )
+    simplis_netlist_model: str = os.environ.get(
+        "SIMPLIS_NETLIST_MODEL",
+        str(resource_path("simulation files", "simplis", "synchronous_buck_tran.net")),
+    )
     rpc_url: str = os.environ.get("PLECS_RPC_URL", 'http://127.0.0.1:1080/RPC2')
     model_id: str = "synchronous buck"
     results_dir: str = os.environ.get(
         "PLECS_RESULTS_DIR",
-        str((Path(__file__).resolve().parent / "results").resolve()),
+        str(writable_path("results")),
     )
     work_dir: str = os.environ.get(
         "PLECS_WORK_DIR",
-        str((Path(__file__).resolve().parent / "plecs_tuning_work").resolve()),
+        str(writable_path("plecs_tuning_work")),
     )
     ltspice_work_dir: str = os.environ.get(
         "LTSPICE_WORK_DIR",
-        str((Path(__file__).resolve().parent / "ltspice_tuning_work").resolve()),
+        str(writable_path("ltspice_tuning_work")),
+    )
+    simplis_work_dir: str = os.environ.get(
+        "SIMPLIS_WORK_DIR",
+        str(writable_path("simplis_tuning_work")),
     )
     sim_time_span: str = "3e-3"
     load_pulse_frequency: str = "250"
@@ -496,12 +511,7 @@ class PlecsModelEditor:
         if not source_path.exists():
             raise FileNotFoundError(f"PLECS source model not found: {source_path}")
 
-        run_dir = Path(work_dir).resolve() / time.strftime("run_%Y%m%d_%H%M%S")
-        suffix = 1
-        while run_dir.exists():
-            run_dir = Path(work_dir).resolve() / f"{time.strftime('run_%Y%m%d_%H%M%S')}_{suffix:02d}"
-            suffix += 1
-        run_dir.mkdir(parents=True, exist_ok=True)
+        run_dir = create_limited_run_dir(Path(work_dir).resolve())
 
         work_model_path = run_dir / source_path.name
         shutil.copyfile(source_path, work_model_path)
@@ -1289,6 +1299,7 @@ class AutoTuner:
         )
         self.model_editor = PlecsModelEditor()
         self.ltspice = LtspiceSimulationRunner(self.config)
+        self.simplis = SimplisSimulationRunner(self.config)
         self.analyzer = ResponseAnalyzer(
             v_target=5.0,
             fsw=250e3,
@@ -1300,6 +1311,56 @@ class AutoTuner:
         self.last_header: List[str] = []
         self.last_data: List[List[float]] = []
         self.work_model_path: Optional[Path] = None
+        self._setup_key: Optional[Tuple[str, ...]] = None
+
+    def _make_setup_key(self, config: Optional[TuningConfig] = None) -> Tuple[str, ...]:
+        """Return the model identity that owns one tuning-work run folder."""
+        cfg = config or self.config
+        backend = cfg.backend
+        if backend == "ltspice":
+            return (
+                backend,
+                str(Path(cfg.ltspice_work_dir).resolve()),
+                str(Path(cfg.ltspice_asc_model).resolve()),
+                str(Path(cfg.ltspice_netlist_model).resolve()),
+                str(Path(cfg.ltspice_bode_netlist_model).resolve()),
+                str(Path(cfg.ltspice_bode_ac_netlist_model).resolve()),
+                str(getattr(cfg, "ltspice_bode_mode", "ac") or "ac").lower(),
+            )
+        if backend == "simplis":
+            return (
+                backend,
+                str(Path(cfg.simplis_work_dir).resolve()),
+                str(Path(cfg.simplis_schematic_model).resolve()),
+                str(Path(cfg.simplis_netlist_model).resolve()),
+            )
+        return (
+            backend,
+            str(Path(cfg.work_dir).resolve()),
+            str(Path(cfg.plecs_model).resolve()),
+            str(cfg.rpc_url),
+            str(cfg.model_id),
+        )
+
+    def can_reuse_work_model(self, config: Optional[TuningConfig] = None) -> bool:
+        """Return True when the existing work copy belongs to the same history."""
+        if self.work_model_path is None or self._setup_key is None:
+            return False
+        if self._setup_key != self._make_setup_key(config):
+            return False
+        return Path(self.work_model_path).exists()
+
+    def _refresh_iteration_context(self) -> None:
+        step_up_t = float(self.config.load_pulse_delay)
+        step_down_t = step_up_t + float(self.config.load_pulse_duty_cycle) / float(self.config.load_pulse_frequency)
+        self.backend = self.config.backend
+        self.ltspice.config = self.config
+        self.simplis.config = self.config
+        self.analyzer = ResponseAnalyzer(
+            v_target=5.0,
+            fsw=250e3,
+            expected_step_times=[step_up_t, step_down_t],
+        )
 
     def _apply_fast_transient_settings(self) -> None:
         """Configure the loaded model for short step-up/step-down tests."""
@@ -1311,7 +1372,7 @@ class AutoTuner:
         self.plecs.set_parameter(f"{model_id}/1A Load", "DutyCycle", self.config.load_pulse_duty_cycle)
         self.plecs.set_parameter(f"{model_id}/1A Load", "Delay", self.config.load_pulse_delay)
 
-    def setup(self) -> None:
+    def setup(self, reuse_work_model: bool = False) -> None:
         """Initialize the selected simulation backend and results directory."""
         print("=" * 60)
         print(f"{self.config.backend.upper()} Buck Converter PID Auto-Tuner")
@@ -1319,13 +1380,47 @@ class AutoTuner:
 
         # Create results directory
         Path(self.config.results_dir).mkdir(parents=True, exist_ok=True)
+        self._refresh_iteration_context()
+
+        if reuse_work_model and self.can_reuse_work_model(self.config):
+            if self.backend == "ltspice":
+                print("\n[1] Reusing LTspice working model...")
+                print(f"  Opening working netlist copy: {self.work_model_path}")
+                return
+            if self.backend == "simplis":
+                print("\n[1] Reusing SIMPLIS working model...")
+                print(f"  Opening working netlist copy: {self.work_model_path}")
+                return
+
+            print("\n[1] Reusing PLECS working model...")
+            self.plecs.ensure_plecs_running()
+            if self.work_model_path is None:
+                raise RuntimeError("PLECS working model path is missing.")
+            work_model_path = Path(self.work_model_path)
+            content = work_model_path.read_text(encoding="utf-8")
+            content = self.model_editor.update_analysis_settings(content, self.config)
+            work_model_path.write_text(content, encoding="utf-8")
+            print(f"  Opening working model copy: {self.work_model_path}")
+            self.plecs.load_model(str(self.work_model_path), force_reload=True)
+            self._apply_fast_transient_settings()
+            return
 
         self.backend = self.config.backend
         if self.backend == "ltspice":
             print("\n[1] Preparing LTspice working model...")
             self.ltspice = LtspiceSimulationRunner(self.config)
             self.work_model_path = self.ltspice.prepare_working_model()
+            self._setup_key = self._make_setup_key()
             print(f"  LTspice executable: {self.config.ltspice_exe or '(PyLTSpice default)'}")
+            print(f"  Opening working netlist copy: {self.work_model_path}")
+            return
+
+        if self.backend == "simplis":
+            print("\n[1] Preparing SIMPLIS working model...")
+            self.simplis = SimplisSimulationRunner(self.config)
+            self.work_model_path = self.simplis.prepare_working_model()
+            self._setup_key = self._make_setup_key()
+            print(f"  SIMetrix/SIMPLIS executable: {self.config.simplis_exe}")
             print(f"  Opening working netlist copy: {self.work_model_path}")
             return
 
@@ -1343,6 +1438,7 @@ class AutoTuner:
             self.config.work_dir,
             self.config,
         )
+        self._setup_key = self._make_setup_key()
         print(f"  Opening working model copy: {self.work_model_path}")
         self.plecs.load_model(str(self.work_model_path), force_reload=True)
         self._apply_fast_transient_settings()
@@ -1361,6 +1457,35 @@ class AutoTuner:
                     self.work_model_path = self.ltspice.work_netlist_path
             except Exception as e:
                 print(f"  LTspice simulation/export error: {e}")
+                self.last_header = []
+                self.last_data = []
+                return TuningResult(iter_num, Kp, Ki, Kd, Kf, 10, 10, 5, 0.005, "FAIL")
+
+            self.last_header = header
+            self.last_data = data
+            overshoot, undershoot, osc_count, settling_time = self.analyzer.analyze(header, data)
+            status = "PASS" if self.config.meets_targets(overshoot, undershoot, osc_count, settling_time) else "FAIL"
+            result = TuningResult(
+                iter_num=iter_num,
+                Kp=Kp, Ki=Ki, Kd=Kd, Kf=Kf,
+                overshoot=overshoot,
+                undershoot=undershoot,
+                osc_count=osc_count,
+                settling_time=settling_time,
+                status=status,
+            )
+            print(f"  Results: OS={overshoot:.1f}%, US={undershoot:.1f}%, "
+                  f"Osc={osc_count}, Settling={settling_time*1000:.1f}ms -> {status}")
+            return result
+
+        if self.config.backend == "simplis":
+            print("  Running SIMPLIS transient simulation...")
+            try:
+                header, data = self.simplis.run_transient(iter_num, Kp, Ki, Kd, Kf)
+                if self.simplis.work_netlist_path is not None:
+                    self.work_model_path = self.simplis.work_netlist_path
+            except Exception as e:
+                print(f"  SIMPLIS simulation/export error: {e}")
                 self.last_header = []
                 self.last_data = []
                 return TuningResult(iter_num, Kp, Ki, Kd, Kf, 10, 10, 5, 0.005, "FAIL")

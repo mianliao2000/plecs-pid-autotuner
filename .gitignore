@@ -17,9 +17,20 @@ ltspice_tuning_work/
 *.raw
 *.log
 *.net
+!simulation files/simplis/*.net
+
+# SIMPLIS runtime artifacts
+simplis_tuning_work/
+*.lck
 
 # Generated outputs
 results/
+build/
+dist/
+dist-electron/
+frontend/node_modules/
+frontend/backend/
+frontend/.vite/
 
 # Tooling caches
 .pytest_cache/
